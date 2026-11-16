@@ -55,6 +55,26 @@ st.markdown("""
             border-radius: 50%;
             display: inline-block;
         }
+        .ud-legend-box {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 16px;
+            background: rgba(255, 255, 255, 0.96);
+            border: 1.5px solid #D1D5DB;
+            border-radius: 10px;
+            padding: 8px 16px;
+            margin-top: 4px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+        }
+        .ud-legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: #111827;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -146,13 +166,14 @@ for col, mode_name in zip((col_b1, col_b2, col_b3), available_modes):
             st.session_state.color_mode = mode_name
             st.rerun()
 
+# 공식 노선도 구조에 맞춘 정밀 좌표 (미남역 3·4호선 환승 분기 정확히 반영)
 LINES_PATH = {
     "1호선": ((12, 18), (12, 8), (15, 6), (55, 6), (58, 8), (58, 58)),
-    "2호선": ((36, 58), (36, 24), (39, 21), (63, 21), (66, 18), (66, 11), (69, 9), (80, 9), (83, 11), (83, 32), (91, 32), (94, 34), (94, 36), (105, 36), (108, 39), (108, 43)),
-    "3호선": ((24, 38), (27, 40), (51, 40), (54, 38), (54, 32), (58, 29), (80, 29), (83, 27)),
+    "2호선": ((36, 58), (36, 24), (39, 21), (63, 21), (66, 18), (66, 11), (69, 9), (80, 9), (83, 11), (83, 32), (91, 32), (94, 35), (105, 35), (108, 38), (108, 43)),
+    "3호선": ((24, 38), (27, 40), (48, 40), (51, 38), (51, 31), (54, 29), (80, 29), (83, 27)),
     "4호선": ((51, 36), (54, 40), (80, 40), (83, 42), (83, 58)),
     "경전철": ((12, 58), (12, 43), (15, 41), (24, 38), (24, 26), (27, 24), (34, 24), (36, 26)),
-    "동해선": ((55, 24), (58, 26), (58, 35), (61, 37), (91, 37), (94, 36), (97, 39), (97, 55), (100, 57), (114, 57))
+    "동해선": ((55, 24), (58, 26), (58, 35), (61, 37), (91, 37), (94, 35), (97, 38), (97, 55), (100, 57), (114, 57))
 }
 
 STATIONS = {
@@ -193,7 +214,7 @@ STATIONS = {
         ("2호선", "광안 -> 수영(208) -> 민락"),
         ("3호선", "기점 -> 수영(301) -> 망미"),
     )),
-    "벡스코": (94, 36, "2호선 · 동해선", "9개", True, "bottom right", "", ("2호선", "동해선"), (
+    "벡스코": (94, 35, "2호선 · 동해선", "9개", True, "bottom right", "", ("2호선", "동해선"), (
         ("2호선", "센텀시티 -> 벡스코(205) -> 동백"),
         ("동해선", "센텀 -> 벡스코(K119) -> 신해운대"),
     )),
@@ -204,12 +225,12 @@ STATIONS = {
         ("3호선", "체육공원 -> 대저(317) -> 종점"),
         ("부산김해경전철", "등구 -> 대저(7) -> 평강"),
     )),
-    "미남": (51, 36, "3호선 · 4호선", "14개", True, "bottom left", "", ("3호선", "4호선"), (
-        ("3호선", "사직 -> 미남(309) -> 만덕"),
+    "미남": (51, 36, "3호선 · 4호선", "14개", True, "middle left", "", ("3호선", "4호선"), (
+        ("3호선", "만덕 -> 미남(309) -> 사직"),
         ("4호선", "기점 -> 미남(401) -> 동래"),
     )),
-    "거제": (54, 32, "3호선 · 동해선", "8개", True, "middle left", "", ("3호선", "동해선"), (
-        ("3호선", "연산 -> 거제(306) -> 종합운동장"),
+    "거제": (51, 31, "3호선 · 동해선", "8개", True, "middle left", "", ("3호선", "동해선"), (
+        ("3호선", "종합운동장 -> 거제(306) -> 연산"),
         ("동해선", "거제해맞이 -> 거제(K112) -> 교대"),
     )),
     "안평": (83, 58, "4호선", "4개", False, "middle right", "4", ("4호선",), (
@@ -229,23 +250,27 @@ STATIONS = {
 colors = current_palette.get("colors")
 outline_color = current_palette.get("outline")
 
-def sample_line_points(coords, step=1.35):
+# 누적 호장 길이 기반 등간격 샘플링 (꺾이는 모서리에서도 끊김 없이 균일한 패턴 배치)
+def sample_line_uniform(coords, step=1.15):
     px, py, angles = [], [], []
+    accum = 0.0
+    next_mark = step * 0.5
     for i in range(len(coords) - 1):
         x1, y1 = coords.__getitem__(i)
         x2, y2 = coords.__getitem__(i + 1)
         dx = x2 - x1
         dy = y2 - y1
-        dist = math.hypot(dx, dy)
-        if dist == 0:
+        seg_len = math.hypot(dx, dy)
+        if seg_len == 0:
             continue
         ang = math.degrees(math.atan2(dy, dx))
-        n_steps = max(1, int(dist / step))
-        for k in range(1, n_steps):
-            t = k / n_steps
+        while next_mark <= accum + seg_len:
+            t = (next_mark - accum) / seg_len
             px.append(x1 + dx * t)
             py.append(y1 + dy * t)
             angles.append(ang)
+            next_mark += step
+        accum += seg_len
     return px, py, angles
 
 def load_transfer_svg_base64():
@@ -268,6 +293,63 @@ def get_station_symbol(station_tuple):
         return "circle"
     first_line = station_tuple.__getitem__(7).__getitem__(0)
     return LINE_SHAPES.get(first_line, "circle")
+
+def build_legend_html():
+    c1 = colors.get("1호선")
+    c2 = colors.get("2호선")
+    c3 = colors.get("3호선")
+    c4 = colors.get("4호선")
+    ck = colors.get("경전철")
+    cd = colors.get("동해선")
+    items = (
+        ("1호선", f"""<svg width="54" height="20" viewBox="0 0 54 20">
+            <line x1="2" y1="10" x2="52" y2="10" stroke="{outline_color}" stroke-width="10" stroke-linecap="round"/>
+            <line x1="2" y1="10" x2="52" y2="10" stroke="{c1}" stroke-width="7" stroke-linecap="round"/>
+            <circle cx="27" cy="10" r="7" fill="#FFFFFF" stroke="{c1}" stroke-width="2.5"/>
+            <text x="27" y="13.2" text-anchor="middle" font-size="9" font-weight="800" fill="#111">1</text>
+        </svg>"""),
+        ("2호선", f"""<svg width="54" height="20" viewBox="0 0 54 20">
+            <line x1="2" y1="10" x2="52" y2="10" stroke="{outline_color}" stroke-width="10" stroke-linecap="round"/>
+            <line x1="2" y1="10" x2="52" y2="10" stroke="{c2}" stroke-width="7" stroke-linecap="round"/>
+            <path d="M8 14 L13 6 M16 14 L21 6 M34 14 L39 6 M42 14 L47 6" stroke="#FFFFFF" stroke-width="2"/>
+            <rect x="20" y="3" width="14" height="14" fill="#FFFFFF" stroke="{c2}" stroke-width="2.5"/>
+            <text x="27" y="13.2" text-anchor="middle" font-size="9" font-weight="800" fill="#111">2</text>
+        </svg>"""),
+        ("3호선", f"""<svg width="54" height="20" viewBox="0 0 54 20">
+            <line x1="2" y1="10" x2="52" y2="10" stroke="{outline_color}" stroke-width="10" stroke-linecap="round"/>
+            <line x1="2" y1="10" x2="52" y2="10" stroke="{c3}" stroke-width="7" stroke-linecap="round"/>
+            <path d="M9 6 V14 M15 6 V14 M39 6 V14 M45 6 V14" stroke="#FFFFFF" stroke-width="2"/>
+            <polygon points="19,4 35,4 27,17" fill="#FFFFFF" stroke="{c3}" stroke-width="2.3"/>
+            <text x="27" y="11.5" text-anchor="middle" font-size="8" font-weight="800" fill="#111">3</text>
+        </svg>"""),
+        ("4호선", f"""<svg width="54" height="20" viewBox="0 0 54 20">
+            <line x1="2" y1="10" x2="52" y2="10" stroke="{outline_color}" stroke-width="10" stroke-linecap="round"/>
+            <line x1="2" y1="10" x2="52" y2="10" stroke="{c4}" stroke-width="7" stroke-linecap="round"/>
+            <path d="M13 14 L8 6 M21 14 L16 6 M39 14 L34 6 M47 14 L42 6" stroke="#FFFFFF" stroke-width="2"/>
+            <polygon points="27,3 35,16 19,16" fill="#FFFFFF" stroke="{c4}" stroke-width="2.3"/>
+            <text x="27" y="14.5" text-anchor="middle" font-size="8" font-weight="800" fill="#111">4</text>
+        </svg>"""),
+        ("부산김해경전철", f"""<svg width="54" height="20" viewBox="0 0 54 20">
+            <line x1="2" y1="10" x2="52" y2="10" stroke="{outline_color}" stroke-width="10" stroke-linecap="round"/>
+            <line x1="2" y1="10" x2="52" y2="10" stroke="{ck}" stroke-width="7" stroke-linecap="round"/>
+            <line x1="3" y1="10" x2="51" y2="10" stroke="#FFFFFF" stroke-width="2.2"/>
+            <polygon points="27,2 35,8 32,17 22,17 19,8" fill="#FFFFFF" stroke="{ck}" stroke-width="2.3"/>
+            <text x="27" y="13.2" text-anchor="middle" font-size="8" font-weight="800" fill="#111">경</text>
+        </svg>"""),
+        ("동해선", f"""<svg width="54" height="20" viewBox="0 0 54 20">
+            <line x1="2" y1="10" x2="52" y2="10" stroke="{outline_color}" stroke-width="10" stroke-linecap="round"/>
+            <line x1="2" y1="10" x2="52" y2="10" stroke="{cd}" stroke-width="7" stroke-linecap="round"/>
+            <circle cx="9" cy="10" r="2" fill="#FFFFFF"/><circle cx="15" cy="10" r="2" fill="#FFFFFF"/>
+            <circle cx="39" cy="10" r="2" fill="#FFFFFF"/><circle cx="45" cy="10" r="2" fill="#FFFFFF"/>
+            <polygon points="27,2 35,10 27,18 19,10" fill="#FFFFFF" stroke="{cd}" stroke-width="2.3"/>
+            <text x="27" y="13" text-anchor="middle" font-size="8" font-weight="800" fill="#111">동</text>
+        </svg>"""),
+    )
+    html_parts = ['<div class="ud-legend-box">']
+    for label, svg_code in items:
+        html_parts.append(f'<div class="ud-legend-item">{svg_code}<span>{label}</span></div>')
+    html_parts.append('</div>')
+    return "".join(html_parts)
 
 @st.dialog("🚉 역 상세 정보 안내", width="small")
 def show_station_popup(station_name):
@@ -313,27 +395,27 @@ for line_name, coords in LINES_PATH.items():
     fig.add_trace(go.Scatter(
         x=xs, y=ys,
         mode="lines",
-        name=line_name,
+        showlegend=False,
         line=dict(color=colors.get(line_name), width=7.5),
         hoverinfo="skip"
     ))
 
-p2_x, p2_y, p2_ang = sample_line_points(LINES_PATH.get("2호선"), step=1.45)
+p2_x, p2_y, p2_ang = sample_line_uniform(LINES_PATH.get("2호선"), step=1.15)
 fig.add_trace(go.Scatter(
     x=p2_x, y=p2_y, mode="markers", showlegend=False, hoverinfo="skip",
-    marker=dict(symbol="line-ns", size=6.5, angle=tuple(-a + 45 for a in p2_ang), line=dict(color="#FFFFFF", width=2.2))
+    marker=dict(symbol="line-ns", size=6.8, angle=tuple(-a + 45 for a in p2_ang), line=dict(color="#FFFFFF", width=2.2))
 ))
 
-p3_x, p3_y, p3_ang = sample_line_points(LINES_PATH.get("3호선"), step=1.35)
+p3_x, p3_y, p3_ang = sample_line_uniform(LINES_PATH.get("3호선"), step=1.1)
 fig.add_trace(go.Scatter(
     x=p3_x, y=p3_y, mode="markers", showlegend=False, hoverinfo="skip",
-    marker=dict(symbol="line-ns", size=6.0, angle=tuple(-a for a in p3_ang), line=dict(color="#FFFFFF", width=2.2))
+    marker=dict(symbol="line-ns", size=6.2, angle=tuple(-a for a in p3_ang), line=dict(color="#FFFFFF", width=2.2))
 ))
 
-p4_x, p4_y, p4_ang = sample_line_points(LINES_PATH.get("4호선"), step=1.45)
+p4_x, p4_y, p4_ang = sample_line_uniform(LINES_PATH.get("4호선"), step=1.15)
 fig.add_trace(go.Scatter(
     x=p4_x, y=p4_y, mode="markers", showlegend=False, hoverinfo="skip",
-    marker=dict(symbol="line-ns", size=6.5, angle=tuple(-a - 45 for a in p4_ang), line=dict(color="#FFFFFF", width=2.2))
+    marker=dict(symbol="line-ns", size=6.8, angle=tuple(-a - 45 for a in p4_ang), line=dict(color="#FFFFFF", width=2.2))
 ))
 
 kj_coords = LINES_PATH.get("경전철")
@@ -343,7 +425,7 @@ fig.add_trace(go.Scatter(
     line=dict(color="#FFFFFF", width=2.2)
 ))
 
-pd_x, pd_y, _ = sample_line_points(LINES_PATH.get("동해선"), step=1.6)
+pd_x, pd_y, _ = sample_line_uniform(LINES_PATH.get("동해선"), step=1.25)
 fig.add_trace(go.Scatter(
     x=pd_x, y=pd_y, mode="markers", showlegend=False, hoverinfo="skip",
     marker=dict(symbol="circle", size=4.2, color="#FFFFFF")
@@ -359,7 +441,7 @@ st_symbols = tuple(get_station_symbol(STATIONS.get(s)) for s in st_names)
 fig.add_trace(go.Scatter(
     x=st_xs, y=st_ys,
     mode="markers+text",
-    name="역 선택 (클릭)",
+    showlegend=False,
     text=st_names,
     textposition=st_positions,
     textfont=dict(size=12, color=current_palette.get("text"), family="Malgun Gothic, AppleGothic, sans-serif"),
@@ -408,21 +490,12 @@ fig.update_layout(
     images=transfer_images,
     xaxis=dict(visible=False, range=(2, 124), fixedrange=False),
     yaxis=dict(visible=False, range=(2, 64), fixedrange=False, scaleanchor="x", scaleratio=0.52),
-    height=550,
+    height=510,
     margin=dict(l=5, r=5, t=5, b=5),
     hovermode="closest",
     hoverdistance=15,
     clickmode="event+select",
-    legend=dict(
-        orientation="h",
-        yanchor="bottom", y=0.01,
-        xanchor="left", x=0.01,
-        itemwidth=45,
-        font=dict(size=12, family="Malgun Gothic, AppleGothic, sans-serif"),
-        bgcolor="rgba(255,255,255,0.95)",
-        bordercolor="#DDDDDD",
-        borderwidth=1
-    ),
+    showlegend=False,
     dragmode="pan"
 )
 
@@ -441,6 +514,8 @@ selection = st.plotly_chart(
     selection_mode="points",
     key=f"map_{st.session_state.color_mode}"
 )
+
+st.markdown(build_legend_html(), unsafe_allow_html=True)
 
 st.components.v1.html("""
 <script>
