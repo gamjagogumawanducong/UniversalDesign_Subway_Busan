@@ -519,7 +519,16 @@ st.components.v1.html("""
 <script>
 (function() {
     const doc = window.parent.document;
+
+    function enableMobilePinch() {
+        const dragLayers = doc.querySelectorAll('.nsewdrag, .draglayer, .svg-container');
+        dragLayers.forEach(el => {
+            el.style.touchAction = 'pinch-zoom pan-x pan-y';
+        });
+    }
+
     function lockIconSize() {
+        enableMobilePinch();
         const plots = doc.querySelectorAll('.js-plotly-plot');
         plots.forEach(gd => {
             if (!gd || !gd._fullLayout || !gd._fullLayout.images) return;
@@ -545,6 +554,7 @@ st.components.v1.html("""
 })();
 </script>
 """, height=0)
+
 
 if selection and selection.selection and selection.selection.points:
     pt = selection.selection.points.__getitem__(0)
