@@ -3,23 +3,21 @@ import streamlit as st
 import plotly.graph_objects as go
 from streamlit_plotly_events import plotly_events
 
-# 1. 페이지 설정 (노트북 한 화면에 스크롤 없이 꽉 차게)
+# 1. 페이지 설정
 st.set_page_config(layout="wide", page_title="부산 도시철도 유니버설 노선도")
 
+# Streamlit 상단 툴바에 가려지지 않도록 padding-top을 3.6rem으로 확보
 st.markdown("""
     <style>
         .block-container {
-            padding-top: 0.8rem;
-            padding-bottom: 0rem;
+            padding-top: 3.6rem;
+            padding-bottom: 0.5rem;
             padding-left: 1.5rem;
             padding-right: 1.5rem;
             max-width: 100%;
         }
-        header[data-testid="stHeader"] {
-            height: 2.2rem;
-        }
         div[data-testid="stVerticalBlock"] > div {
-            gap: 0.35rem;
+            gap: 0.4rem;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -94,7 +92,7 @@ for col, mode_name in zip((col_b1, col_b2, col_b3), available_modes):
             st.session_state.color_mode = mode_name
             st.rerun()
 
-# 5. 노트북 가로 화면(16:9)에 꽉 차도록 압축·재설계한 노선 좌표 (X: 0~120, Y: 0~65)
+# 5. 노트북 가로 화면(16:9)에 맞는 노선 좌표
 LINES_PATH = {
     "1호선": ((12, 18), (12, 8), (15, 6), (55, 6), (58, 8), (58, 58)),
     "2호선": ((36, 58), (36, 24), (39, 21), (63, 21), (66, 18), (66, 12), (69, 10), (80, 10), (83, 12), (83, 36), (105, 36), (108, 39), (108, 43)),
@@ -104,46 +102,95 @@ LINES_PATH = {
     "동해선": ((55, 24), (58, 26), (58, 34), (61, 36), (91, 36), (94, 38), (94, 55), (97, 57), (112, 57))
 }
 
-# 6. 주요 역(Vertex) 데이터 (행선지 방면 안내 포함)
-# 형식: "역이름": (x, y, 호선목록, 역번호, 출구수, 환승여부, 라벨위치, 방면안내)
+# 6. 주요 역(Vertex) 데이터
+# 형식: "역이름": (x, y, 호선목록, 출구수, 환승여부, 라벨위치, (노선별 진행방향 및 역번호 튜플))
 STATIONS = {
     # 1호선
-    "다대포해수욕장": (12, 18, "1호선", "095", "4개", False, "top center", "1호선 기점 → 노포 행"),
-    "서면": (58, 21, "1호선 · 2호선", "119 / 219", "15개", True, "bottom right", "1호선: 다대포해수욕장 행 ↔ 노포 행 / 2호선: 장산 행 ↔ 양산 행"),
-    "연산": (58, 29, "1호선 · 3호선", "123 / 305", "17개", True, "bottom right", "1호선: 다대포해수욕장 행 ↔ 노포 행 / 3호선: 수영 행 ↔ 대저 행"),
-    "교대": (58, 34, "1호선 · 동해선", "124 / K113", "8개", True, "top right", "1호선: 다대포해수욕장 행 ↔ 노포 행 / 동해선: 부전 행 ↔ 태화강 행"),
-    "동래": (58, 38, "1호선 · 4호선", "125 / 402", "4개", True, "top left", "1호선: 다대포해수욕장 행 ↔ 노포 행 / 4호선: 미남 행 ↔ 안평 행"),
-    "노포": (58, 58, "1호선", "134", "3개", False, "middle left", "1호선 종점 → 다대포해수욕장 행"),
+    "다대포해수욕장": (12, 18, "1호선", "4개", False, "top center", (
+        ("1호선", "기점 -> 다대포해수욕장(095) -> 다대포항"),
+    )),
+    "서면": (58, 21, "1호선 · 2호선", "15개", True, "bottom right", (
+        ("1호선", "범내골 -> 서면(119) -> 부전"),
+        ("2호선", "전포 -> 서면(219) -> 부암"),
+    )),
+    "연산": (58, 29, "1호선 · 3호선", "17개", True, "bottom right", (
+        ("1호선", "시청 -> 연산(123) -> 교대"),
+        ("3호선", "물만골 -> 연산(305) -> 거제"),
+    )),
+    "교대": (58, 34, "1호선 · 동해선", "8개", True, "top right", (
+        ("1호선", "연산 -> 교대(124) -> 동래"),
+        ("동해선", "거제 -> 교대(K113) -> 동래"),
+    )),
+    "동래": (58, 38, "1호선 · 4호선", "4개", True, "top left", (
+        ("1호선", "교대 -> 동래(125) -> 명륜"),
+        ("4호선", "미남 -> 동래(402) -> 수안"),
+    )),
+    "노포": (58, 58, "1호선", "3개", False, "middle left", (
+        ("1호선", "범어사 -> 노포(134) -> 종점"),
+    )),
 
     # 2호선
-    "양산": (36, 58, "2호선", "243", "4개", False, "middle right", "2호선 종점 → 장산 행"),
-    "덕천": (36, 38, "2호선 · 3호선", "233 / 313", "12개", True, "bottom right", "2호선: 장산 행 ↔ 양산 행 / 3호선: 수영 행 ↔ 대저 행"),
-    "사상": (36, 26, "2호선 · 부산김해경전철", "227 / 1", "6개", True, "bottom left", "2호선: 장산 행 ↔ 양산 행 / 경전철 기점 → 가야대 행"),
-    "수영": (83, 27, "2호선 · 3호선", "208 / 301", "17개", True, "middle right", "2호선: 장산 행 ↔ 양산 행 / 3호선 기점 → 대저 행"),
-    "벡스코": (94, 36, "2호선 · 동해선", "205 / K119", "9개", True, "bottom right", "2호선: 장산 행 ↔ 양산 행 / 동해선: 부전 행 ↔ 태화강 행"),
-    "장산": (108, 43, "2호선", "201", "14개", False, "top center", "2호선 기점 → 양산 행"),
+    "양산": (36, 58, "2호선", "4개", False, "middle right", (
+        ("2호선", "남양산 -> 양산(243) -> 종점"),
+    )),
+    "덕천": (36, 38, "2호선 · 3호선", "12개", True, "bottom right", (
+        ("2호선", "구명 -> 덕천(233) -> 수정"),
+        ("3호선", "숙등 -> 덕천(313) -> 구포"),
+    )),
+    "사상": (36, 26, "2호선 · 부산김해경전철", "6개", True, "bottom left", (
+        ("2호선", "감전 -> 사상(227) -> 덕포"),
+        ("부산김해경전철", "기점 -> 사상(1) -> 괘법르네시떼"),
+    )),
+    "수영": (83, 27, "2호선 · 3호선", "17개", True, "middle right", (
+        ("2호선", "민락 -> 수영(208) -> 광안"),
+        ("3호선", "기점 -> 수영(301) -> 망미"),
+    )),
+    "벡스코": (94, 36, "2호선 · 동해선", "9개", True, "bottom right", (
+        ("2호선", "센텀시티 -> 벡스코(205) -> 동백"),
+        ("동해선", "센텀 -> 벡스코(K119) -> 신해운대"),
+    )),
+    "장산": (108, 43, "2호선", "14개", False, "top center", (
+        ("2호선", "기점 -> 장산(201) -> 중동"),
+    )),
 
     # 3호선
-    "대저": (24, 36, "3호선 · 부산김해경전철", "317 / 7", "3개", True, "middle left", "3호선 종점 → 수영 행 / 경전철: 사상 행 ↔ 가야대 행"),
-    "미남": (51, 38, "3호선 · 4호선", "309 / 401", "14개", True, "top left", "3호선: 수영 행 ↔ 대저 행 / 4호선 기점 → 안평 행"),
-    "거제": (54, 32, "3호선 · 동해선", "306 / K112", "8개", True, "middle left", "3호선: 수영 행 ↔ 대저 행 / 동해선: 부전 행 ↔ 태화강 행"),
+    "대저": (24, 36, "3호선 · 부산김해경전철", "3개", True, "middle left", (
+        ("3호선", "체육공원 -> 대저(317) -> 종점"),
+        ("부산김해경전철", "등구 -> 대저(7) -> 평강"),
+    )),
+    "미남": (51, 38, "3호선 · 4호선", "14개", True, "top left", (
+        ("3호선", "사직 -> 미남(309) -> 만덕"),
+        ("4호선", "기점 -> 미남(401) -> 동래"),
+    )),
+    "거제": (54, 32, "3호선 · 동해선", "8개", True, "middle left", (
+        ("3호선", "연산 -> 거제(306) -> 종합운동장"),
+        ("동해선", "거제해맞이 -> 거제(K112) -> 교대"),
+    )),
 
     # 4호선
-    "안평": (83, 58, "4호선", "414", "4개", False, "middle right", "4호선 종점 → 미남 행"),
+    "안평": (83, 58, "4호선", "4개", False, "middle right", (
+        ("4호선", "고촌 -> 안평(414) -> 종점"),
+    )),
 
     # 부산김해경전철
-    "가야대": (12, 58, "부산김해경전철", "21", "2개", False, "middle right", "부산김해경전철 종점 → 사상 행"),
+    "가야대": (12, 58, "부산김해경전철", "2개", False, "middle right", (
+        ("부산김해경전철", "장신대 -> 가야대(21) -> 종점"),
+    )),
 
     # 동해선
-    "부전": (55, 24, "동해선 (1호선 인근)", "K110", "2개", False, "middle left", "동해선 기점 → 태화강 행"),
-    "태화강": (112, 57, "동해선", "K132", "2개", False, "top center", "동해선 종점 → 부전 행"),
+    "부전": (55, 24, "동해선 (1호선 인근)", "2개", False, "middle left", (
+        ("동해선", "기점 -> 부전(K110) -> 거제해맞이"),
+    )),
+    "태화강": (112, 57, "동해선", "2개", False, "top center", (
+        ("동해선", "개운포 -> 태화강(K132) -> 종점"),
+    )),
 }
 
 colors = current_palette.get("colors")
 dashes = LINE_DASH.get(st.session_state.color_mode)
 
 def get_station_border_color(station_tuple):
-    is_transfer = station_tuple.__getitem__(5)
+    is_transfer = station_tuple.__getitem__(4)
     if is_transfer:
         return "#111111"
     first_line = station_tuple.__getitem__(2).split(" ").__getitem__(0)
@@ -154,7 +201,7 @@ def get_station_border_color(station_tuple):
 # 7. 나무위키 주석 스타일의 팝업 다이얼로그 정의
 @st.dialog("🚉 역 상세 정보 안내", width="small")
 def show_station_popup(station_name):
-    x, y, line_info, st_num, exits, is_transfer, _, direction_info = STATIONS.get(station_name)
+    x, y, line_info, exits, is_transfer, _, route_flows = STATIONS.get(station_name)
 
     badge = "🔄 핵심 환승역" if is_transfer else "🚩 기점 / 종점"
     st.markdown(f"### {station_name}역 &nbsp; `{badge}`")
@@ -176,8 +223,9 @@ def show_station_popup(station_name):
 
     st.markdown("---")
     st.markdown(f"**• 운행 노선:** {line_info}")
-    st.markdown(f"**• 방면(행선지):** {direction_info}")
-    st.markdown(f"**• 역 번호:** {st_num}")
+    st.markdown("**• 방면 및 역 번호:**")
+    for line_label, flow_text in route_flows:
+        st.markdown(f"&nbsp;&nbsp;&nbsp;- **{line_label}**: `{flow_text}`")
     st.markdown(f"**• 출구 개수:** {exits}")
 
 # 8. 화면 전체 너비(100%)로 벡터 노선도 렌더링 (스크롤 없이 한눈에)
@@ -197,9 +245,9 @@ for line_name, coords in LINES_PATH.items():
 st_names = tuple(STATIONS.keys())
 st_xs = tuple(STATIONS.get(s).__getitem__(0) for s in st_names)
 st_ys = tuple(STATIONS.get(s).__getitem__(1) for s in st_names)
-st_sizes = tuple(15 if STATIONS.get(s).__getitem__(5) else 12 for s in st_names)
+st_sizes = tuple(15 if STATIONS.get(s).__getitem__(4) else 12 for s in st_names)
 st_border_colors = tuple(get_station_border_color(STATIONS.get(s)) for s in st_names)
-st_positions = tuple(STATIONS.get(s).__getitem__(6) for s in st_names)
+st_positions = tuple(STATIONS.get(s).__getitem__(5) for s in st_names)
 
 fig.add_trace(go.Scatter(
     x=st_xs, y=st_ys,
@@ -221,7 +269,7 @@ fig.update_layout(
     paper_bgcolor=current_palette.get("bg"),
     xaxis=dict(visible=False, range=(2, 122), fixedrange=False),
     yaxis=dict(visible=False, range=(2, 64), fixedrange=False),
-    height=570,
+    height=530,
     margin=dict(l=5, r=5, t=5, b=5),
     hovermode="closest",
     hoverdistance=15,
@@ -241,15 +289,16 @@ clicked = plotly_events(
     click_event=True,
     hover_event=False,
     select_event=False,
-    override_height=570,
+    override_height=530,
     key=f"map_{st.session_state.color_mode}"
 )
 
 if clicked:
-    first_click = clicked.__getitem__(0)
-    cx, cy = first_click.get("x"), first_click.get("y")
-    click_token = f"{cx}_{cy}_{st.session_state.color_mode}"
-    closest = min(st_names, key=lambda s: (STATIONS.get(s).__getitem__(0) - cx)**2 + (STATIONS.get(s).__getitem__(1) - cy)**2)
-    if st.session_state.last_click_id != click_token:
-        st.session_state.last_click_id = click_token
-        show_station_popup(closest)
+first_click = clicked.getitem(0)
+cx, cy = first_click.get("x"), first_click.get("y")
+click_token = f"{cx}{cy}{st.session_state.color_mode}"
+closest = min(st_names, key=lambda s: (STATIONS.get(s).getitem(0) - cx)2 + (STATIONS.get(s).getitem(1) - cy)2)
+if st.session_state.last_click_id != click_token:
+st.session_state.last_click_id = click_token
+show_station_popup(closest)
+
