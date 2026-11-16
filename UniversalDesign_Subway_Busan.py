@@ -401,13 +401,16 @@ st.components.v1.html("""
             const xa = gd._fullLayout.xaxis;
             const ya = gd._fullLayout.yaxis;
             if (!xa || !ya) return;
-            const pxPerX = xa._length / Math.abs(xa.range[1] - xa.range[0]);
-            const pxPerY = ya._length / Math.abs(ya.range[1] - ya.range[0]);
+            const spanX = Math.abs(xa.range.at(1) - xa.range.at(0));
+            const spanY = Math.abs(ya.range.at(1) - ya.range.at(0));
+            if (spanX === 0 || spanY === 0) return;
+            const pxPerX = xa._length / spanX;
+            const pxPerY = ya._length / spanY;
             const targetPx = 20;
             const newSizeX = targetPx / pxPerX;
             const newSizeY = targetPx / pxPerY;
             const imgs = gd.layout.images;
-            if (imgs && imgs.length > 0 && Math.abs(imgs[0].sizex - newSizeX) > 0.001) {
+            if (imgs && imgs.length > 0 && Math.abs(imgs.at(0).sizex - newSizeX) > 0.001) {
                 const updated = imgs.map(im => Object.assign({}, im, {sizex: newSizeX, sizey: newSizeY}));
                 window.parent.Plotly.relayout(gd, {images: updated});
             }
@@ -425,3 +428,5 @@ if selection and selection.selection and selection.selection.points:
         chosen_station = st_names.__getitem__(idx)
         click_token = f"{chosen_station}_{st.session_state.color_mode}_{pt}"
         if st.session_state.last_click_id != click_token:
+            st.session_state.last_click_id = click_token
+            show_station_popup(chosen_station)
