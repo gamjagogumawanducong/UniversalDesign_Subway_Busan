@@ -236,7 +236,7 @@ def get_station_border_color(station_tuple):
 def show_station_popup(station_name):
     x, y, line_info, exits, is_transfer, _, route_flows = STATIONS.get(station_name)
 
-    badge = "🔄 핵심 환승역" if is_transfer else "🚩 기점 / 종점"
+    badge = "🔄 환승역" if is_transfer else "🚩 기점 / 종점"
     st.markdown(f"### {station_name}역 &nbsp; `{badge}`")
 
     img_path = None
