@@ -4,6 +4,8 @@ import plotly.graph_objects as go
 
 st.set_page_config(layout="wide", page_title="부산 도시철도 유니버설 노선도")
 
+st.components.v1.html('<script src="https://plot.ly"></script>', height=0)
+
 st.markdown("""
     <style>
         .block-container {
@@ -16,10 +18,38 @@ st.markdown("""
         div[data-testid="stVerticalBlock"] > div {
             gap: 0.4rem;
         }
+        .header-wrap {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .header-title {
+            font-size: 1.45rem;
+            font-weight: 800;
+            color: #111827;
+            letter-spacing: -0.02em;
+            margin: 0;
+        }
+        .mode-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 14px;
+            border-radius: 999px;
+            font-size: 0.88rem;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .mode-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
     </style>
 """, unsafe_allow_html=True)
-
-st.components.v1.html('<script src="https://plot.ly"></script>', height=0)
 
 PALETTES = {
     "기본": {
@@ -27,30 +57,42 @@ PALETTES = {
             "1호선": "#F06A00", "2호선": "#81BF48", "3호선": "#BB8C00",
             "4호선": "#0054A6", "경전철": "#875CAC", "동해선": "#217DCB"
         },
+        "badge_bg": "#FFF4E6",
+        "badge_text": "#D9480F",
+        "badge_border": "#FFD8A8",
         "bg": "#FFFFFF",
         "text": "#111111"
     },
     "적록색맹용": {
         "colors": {
-            "1호선": "#E69F00", "2호선": "#005AB5", "3호선": "#56B4E9",
-            "4호선": "#1A237E", "경전철": "#D4A017", "동해선": "#88CCEE"
+            "1호선": "#E69F00", "2호선": "#004C99", "3호선": "#56B4E9",
+            "4호선": "#111844", "경전철": "#C88A04", "동해선": "#80C8F0"
         },
+        "badge_bg": "#E7F5FF",
+        "badge_text": "#1864AB",
+        "badge_border": "#A5D8FF",
         "bg": "#FFFFFF",
         "text": "#111111"
     },
     "청황색맹용": {
         "colors": {
-            "1호선": "#C2185B", "2호선": "#00838F", "3호선": "#F48FB1",
-            "4호선": "#111111", "경전철": "#6A1B4D", "동해선": "#4DD0E1"
+            "1호선": "#B80D48", "2호선": "#007A87", "3호선": "#F06292",
+            "4호선": "#111111", "경전철": "#5C0931", "동해선": "#4DD0E1"
         },
+        "badge_bg": "#FFF0F6",
+        "badge_text": "#A61E4D",
+        "badge_border": "#FCC2D7",
         "bg": "#FFFFFF",
         "text": "#111111"
     },
     "전색맹용": {
         "colors": {
-            "1호선": "#111111", "2호선": "#484848", "3호선": "#767676",
-            "4호선": "#9E9E9E", "경전철": "#2E2E2E", "동해선": "#616161"
+            "1호선": "#0A0A0A", "2호선": "#2E2E2E", "3호선": "#4D4D4D",
+            "4호선": "#6E6E6E", "경전철": "#1C1C1C", "동해선": "#3D3D3D"
         },
+        "badge_bg": "#F1F3F5",
+        "badge_text": "#212529",
+        "badge_border": "#CED4DA",
         "bg": "#FFFFFF",
         "text": "#111111"
     }
@@ -60,7 +102,14 @@ LINE_DASH = {
     "기본": {"1호선": "solid", "2호선": "solid", "3호선": "solid", "4호선": "solid", "경전철": "solid", "동해선": "solid"},
     "적록색맹용": {"1호선": "solid", "2호선": "solid", "3호선": "solid", "4호선": "solid", "경전철": "solid", "동해선": "solid"},
     "청황색맹용": {"1호선": "solid", "2호선": "solid", "3호선": "solid", "4호선": "solid", "경전철": "solid", "동해선": "solid"},
-    "전색맹용": {"1호선": "solid", "2호선": "dash", "3호선": "dot", "4호선": "dashdot", "경전철": "longdash", "동해선": "longdashdot"},
+    "전색맹용": {
+        "1호선": "solid",
+        "2호선": "16px,6px",
+        "3호선": "4px,5px",
+        "4호선": "16px,5px,4px,5px",
+        "경전철": "26px,7px",
+        "동해선": "10px,4px,3px,4px,3px,4px"
+    },
 }
 
 if "color_mode" not in st.session_state:
@@ -72,7 +121,15 @@ col_title, col_b1, col_b2, col_b3 = st.columns((6.4, 1.2, 1.2, 1.2))
 current_palette = PALETTES.get(st.session_state.color_mode)
 
 with col_title:
-    st.markdown(f"#### 🚇 부산 도시철도 유니버설 노선도 &nbsp; `현재: {st.session_state.color_mode}`")
+    st.markdown(f"""
+        <div class="header-wrap">
+            <h1 class="header-title">🚇 부산 도시철도 유니버설 노선도</h1>
+            <span class="mode-badge" style="background-color:{current_palette.get('badge_bg')}; color:{current_palette.get('badge_text')}; border:1.5px solid {current_palette.get('badge_border')};">
+                <span class="mode-dot" style="background-color:{current_palette.get('badge_text')};"></span>
+                {st.session_state.color_mode} 모드
+            </span>
+        </div>
+    """, unsafe_allow_html=True)
 
 all_modes = ("기본", "적록색맹용", "청황색맹용", "전색맹용")
 available_modes = tuple(m for m in all_modes if m != st.session_state.color_mode)
@@ -183,7 +240,7 @@ def show_station_popup(station_name):
     st.markdown(f"### {station_name}역 &nbsp; `{badge}`")
 
     img_path = None
-    for ext in ("jpg", "png", "jpeg"):
+    for ext in ("jpg", "png", "jpeg", "JPG", "PNG", "JPEG"):
         candidate = os.path.join("images", f"{station_name}.{ext}")
         if os.path.exists(candidate):
             img_path = candidate
@@ -213,7 +270,7 @@ for line_name, coords in LINES_PATH.items():
         x=xs, y=ys,
         mode="lines",
         name=line_name,
-        line=dict(color=colors.get(line_name), width=7, dash=dashes.get(line_name)),
+        line=dict(color=colors.get(line_name), width=6.5, dash=dashes.get(line_name)),
         hoverinfo="skip"
     ))
 
@@ -253,7 +310,9 @@ fig.update_layout(
         orientation="h",
         yanchor="bottom", y=0.01,
         xanchor="left", x=0.01,
-        bgcolor="rgba(255,255,255,0.92)",
+        itemwidth=55,
+        font=dict(size=12, family="Malgun Gothic, AppleGothic, sans-serif"),
+        bgcolor="rgba(255,255,255,0.95)",
         bordercolor="#DDDDDD",
         borderwidth=1
     ),
