@@ -1,5 +1,4 @@
 import os
-import base64
 import streamlit as st
 import plotly.graph_objects as go
 
@@ -204,7 +203,7 @@ STATIONS = {
     "장산": (108, 43, "2호선", "14개", False, "top center", "2", ("2호선",), (
         ("2호선", "기점 -> 장산(201) -> 중동"),
     )),
-    "대저": (24, 38, "3호선 · 부산김해경전철", "3개", True, "middle left", "", ("3호선", "경전철"), (
+    "대저": (24, 38, "3호선 · 부산김해경전철", "3개", True, "top left", "", ("3호선", "경전철"), (
         ("3호선", "체육공원 -> 대저(317) -> 종점"),
         ("부산김해경전철", "등구 -> 대저(7) -> 평강"),
     )),
@@ -234,21 +233,7 @@ colors = current_palette.get("colors")
 dashes = LINE_DASH.get(st.session_state.color_mode)
 outline_color = current_palette.get("outline")
 
-def load_transfer_svg_base64():
-    if not os.path.exists("images"):
-        return None
-    svg_files = tuple(f for f in os.listdir("images") if f.lower().endswith(".svg"))
-    if not svg_files:
-        return None
-    target_path = os.path.join("images", svg_files.__getitem__(0))
-    with open(target_path, "rb") as f:
-        encoded = base64.b64encode(f.read()).decode("utf-8")
-    return f"data:image/svg+xml;base64,{encoded}"
-
 def get_station_border_color(station_tuple):
-    is_transfer = station_tuple.__getitem__(4)
-    if is_transfer:
-        return "#111111"
     first_line = station_tuple.__getitem__(7).__getitem__(0)
     return colors.get(first_line, "#111111")
 
@@ -305,11 +290,43 @@ for line_name, coords in LINES_PATH.items():
 st_names = tuple(STATIONS.keys())
 st_xs = tuple(STATIONS.get(s).__getitem__(0) for s in st_names)
 st_ys = tuple(STATIONS.get(s).__getitem__(1) for s in st_names)
-st_sizes = tuple(21 if STATIONS.get(s).__getitem__(4) else 16 for s in st_names)
-st_border_colors = tuple(get_station_border_color(STATIONS.get(s)) for s in st_names)
 st_positions = tuple(STATIONS.get(s).__getitem__(5) for s in st_names)
-st_badges = tuple(STATIONS.get(s).__getitem__(6) for s in st_names)
 
+# 기점·종점용 흰색 원 마커 (환승역은 투명 처리)
+single_sizes = tuple(0 if STATIONS.get(s).__getitem__(4) else 16 for s in st_names)
+single_borders = tuple("#111111" if STATIONS.get(s).__getitem__(4) else get_station_border_color(STATIONS.get(s)) for s in st_names)
+single_badges = tuple(STATIONS.get(s).__getitem__(6) for s in st_names)
+
+# 환승역 전용 고정 픽셀 삼태극 마커 레이어 (확대/축소 시 크기 변하지 않음)
+tr_xs = tuple(STATIONS.get(s).__getitem__(0) for s in st_names if STATIONS.get(s).__getitem__(4))
+tr_ys = tuple(STATIONS.get(s).__getitem__(1) for s in st_names if STATIONS.get(s).__getitem__(4))
+
+# 1) 환승역 바깥 검은 테두리 + 빨강 베이스 원 (고정 19px)
+fig.add_trace(go.Scatter(
+    x=tr_xs, y=tr_ys,
+    mode="markers",
+    showlegend=False,
+    marker=dict(size=19, color="#D32F2F", line=dict(color="#111111", width=2)),
+    hoverinfo="skip"
+))
+# 2) 환승역 파랑 레이어 (고정 14px)
+fig.add_trace(go.Scatter(
+    x=tr_xs, y=tr_ys,
+    mode="markers",
+    showlegend=False,
+    marker=dict(size=13, symbol="triangle-down", color="#0D47A1"),
+    hoverinfo="skip"
+))
+# 3) 환승역 노랑 레이어 (고정 14px)
+fig.add_trace(go.Scatter(
+    x=tr_xs, y=tr_ys,
+    mode="markers",
+    showlegend=False,
+    marker=dict(size=13, symbol="triangle-right", color="#FBC02D"),
+    hoverinfo="skip"
+))
+
+# 전체 역 클릭 감지 및 역 이름 라벨 레이어 (curve_number == 15)
 fig.add_trace(go.Scatter(
     x=st_xs, y=st_ys,
     mode="markers+text",
@@ -318,46 +335,32 @@ fig.add_trace(go.Scatter(
     textposition=st_positions,
     textfont=dict(size=12, color=current_palette.get("text"), family="Malgun Gothic, AppleGothic, sans-serif"),
     marker=dict(
-        size=st_sizes,
-        color="#FFFFFF",
-        line=dict(color=st_border_colors, width=3.0)
+        size=tuple(19 if STATIONS.get(s).__getitem__(4) else 16 for s in st_names),
+        color=tuple("rgba(0,0,0,0)" if STATIONS.get(s).__getitem__(4) else "#FFFFFF" for s in st_names),
+        line=dict(
+            color=tuple("rgba(0,0,0,0)" if STATIONS.get(s).__getitem__(4) else get_station_border_color(STATIONS.get(s)) for s in st_names),
+            width=3.0
+        )
     ),
     hovertemplate="<b>%{text}역</b> (클릭하여 정보 열기)<extra></extra>"
 ))
 
+# 기점·종점 내부 숫자/글자 레이어
 fig.add_trace(go.Scatter(
     x=st_xs, y=st_ys,
     mode="text",
     showlegend=False,
-    text=st_badges,
+    text=single_badges,
     textposition="middle center",
     textfont=dict(size=9, color="#111111", family="Malgun Gothic, AppleGothic, sans-serif"),
     hoverinfo="skip"
 ))
 
-transfer_svg_uri = load_transfer_svg_base64()
-transfer_images = []
-if transfer_svg_uri:
-    for s in st_names:
-        st_data = STATIONS.get(s)
-        if st_data.__getitem__(4):
-            sx = st_data.__getitem__(0)
-            sy = st_data.__getitem__(1)
-            transfer_images.append(dict(
-                source=transfer_svg_uri,
-                xref="x", yref="y",
-                x=sx, y=sy,
-                sizex=2.3, sizey=2.3,
-                xanchor="center", yanchor="middle",
-                layer="above"
-            ))
-
 fig.update_layout(
     plot_bgcolor=current_palette.get("bg"),
     paper_bgcolor=current_palette.get("bg"),
-    images=transfer_images,
     xaxis=dict(visible=False, range=(2, 124), fixedrange=False),
-    yaxis=dict(visible=False, range=(2, 64), fixedrange=False, scaleanchor="x", scaleratio=0.52),
+    yaxis=dict(visible=False, range=(2, 64), fixedrange=False),
     height=550,
     margin=dict(l=5, r=5, t=5, b=5),
     hovermode="closest",
@@ -394,7 +397,7 @@ selection = st.plotly_chart(
 
 if selection and selection.selection and selection.selection.points:
     pt = selection.selection.points.__getitem__(0)
-    if pt.get("curve_number") == 12:
+    if pt.get("curve_number") == 15:
         idx = pt.get("point_index")
         chosen_station = st_names.__getitem__(idx)
         click_token = f"{chosen_station}_{st.session_state.color_mode}_{pt}"
