@@ -1,4 +1,5 @@
 import os
+import math
 import base64
 import streamlit as st
 import plotly.graph_objects as go
@@ -60,8 +61,8 @@ st.markdown("""
 PALETTES = {
     "기본": {
         "colors": {
-            "1호선": "#F06A00", "2호선": "#81BF48", "3호선": "#BB8C00",
-            "4호선": "#0054A6", "경전철": "#875CAC", "동해선": "#217DCB"
+            "1호선": "#F06A00", "2호선": "#68A832", "3호선": "#B8860B",
+            "4호선": "#0054A6", "경전철": "#7E52A0", "동해선": "#1E73BE"
         },
         "outline": "#1F2937",
         "badge_bg": "#FFF4E6",
@@ -72,8 +73,8 @@ PALETTES = {
     },
     "적록색맹용": {
         "colors": {
-            "1호선": "#E69F00", "2호선": "#004C99", "3호선": "#56B4E9",
-            "4호선": "#111844", "경전철": "#C88A04", "동해선": "#80C8F0"
+            "1호선": "#E69F00", "2호선": "#004C99", "3호선": "#4DA6FF",
+            "4호선": "#111844", "경전철": "#C88A04", "동해선": "#7AC5F8"
         },
         "outline": "#111111",
         "badge_bg": "#E7F5FF",
@@ -84,8 +85,8 @@ PALETTES = {
     },
     "청황색맹용": {
         "colors": {
-            "1호선": "#B80D48", "2호선": "#007A87", "3호선": "#F06292",
-            "4호선": "#111111", "경전철": "#5C0931", "동해선": "#4DD0E1"
+            "1호선": "#B80D48", "2호선": "#007A87", "3호선": "#E85D8F",
+            "4호선": "#111111", "경전철": "#5C0931", "동해선": "#38B6C7"
         },
         "outline": "#111111",
         "badge_bg": "#FFF0F6",
@@ -96,8 +97,8 @@ PALETTES = {
     },
     "전색맹용": {
         "colors": {
-            "1호선": "#111111", "2호선": "#3B3B3B", "3호선": "#666666",
-            "4호선": "#8C8C8C", "경전철": "#242424", "동해선": "#525252"
+            "1호선": "#111111", "2호선": "#333333", "3호선": "#525252",
+            "4호선": "#707070", "경전철": "#222222", "동해선": "#454545"
         },
         "outline": "#000000",
         "badge_bg": "#F1F3F5",
@@ -108,18 +109,13 @@ PALETTES = {
     }
 }
 
-LINE_DASH = {
-    "기본": {"1호선": "solid", "2호선": "solid", "3호선": "solid", "4호선": "solid", "경전철": "solid", "동해선": "solid"},
-    "적록색맹용": {"1호선": "solid", "2호선": "solid", "3호선": "solid", "4호선": "solid", "경전철": "solid", "동해선": "solid"},
-    "청황색맹용": {"1호선": "solid", "2호선": "solid", "3호선": "solid", "4호선": "solid", "경전철": "solid", "동해선": "solid"},
-    "전색맹용": {
-        "1호선": "solid",
-        "2호선": "16px,6px",
-        "3호선": "4px,5px",
-        "4호선": "16px,5px,4px,5px",
-        "경전철": "26px,7px",
-        "동해선": "10px,4px,3px,4px,3px,4px"
-    },
+LINE_SHAPES = {
+    "1호선": "circle",
+    "2호선": "square",
+    "3호선": "triangle-down",
+    "4호선": "triangle-up",
+    "경전철": "pentagon",
+    "동해선": "diamond"
 }
 
 if "color_mode" not in st.session_state:
@@ -231,8 +227,26 @@ STATIONS = {
 }
 
 colors = current_palette.get("colors")
-dashes = LINE_DASH.get(st.session_state.color_mode)
 outline_color = current_palette.get("outline")
+
+def sample_line_points(coords, step=1.35):
+    px, py, angles = [], [], []
+    for i in range(len(coords) - 1):
+        x1, y1 = coords.__getitem__(i)
+        x2, y2 = coords.__getitem__(i + 1)
+        dx = x2 - x1
+        dy = y2 - y1
+        dist = math.hypot(dx, dy)
+        if dist == 0:
+            continue
+        ang = math.degrees(math.atan2(dy, dx))
+        n_steps = max(1, int(dist / step))
+        for k in range(1, n_steps):
+            t = k / n_steps
+            px.append(x1 + dx * t)
+            py.append(y1 + dy * t)
+            angles.append(ang)
+    return px, py, angles
 
 def load_transfer_svg_base64():
     if not os.path.exists("images"):
@@ -248,6 +262,12 @@ def load_transfer_svg_base64():
 def get_station_border_color(station_tuple):
     first_line = station_tuple.__getitem__(7).__getitem__(0)
     return colors.get(first_line, "#111111")
+
+def get_station_symbol(station_tuple):
+    if station_tuple.__getitem__(4):
+        return "circle"
+    first_line = station_tuple.__getitem__(7).__getitem__(0)
+    return LINE_SHAPES.get(first_line, "circle")
 
 @st.dialog("🚉 역 상세 정보 안내", width="small")
 def show_station_popup(station_name):
@@ -283,27 +303,58 @@ fig = go.Figure()
 for line_name, coords in LINES_PATH.items():
     xs = tuple(x for x, y in coords)
     ys = tuple(y for x, y in coords)
-    outline_dash = dashes.get(line_name) if st.session_state.color_mode == "전색맹용" else "solid"
     fig.add_trace(go.Scatter(
         x=xs, y=ys,
         mode="lines",
         showlegend=False,
-        line=dict(color=outline_color, width=9.5, dash=outline_dash),
+        line=dict(color=outline_color, width=10.5),
         hoverinfo="skip"
     ))
     fig.add_trace(go.Scatter(
         x=xs, y=ys,
         mode="lines",
         name=line_name,
-        line=dict(color=colors.get(line_name), width=6.5, dash=dashes.get(line_name)),
+        line=dict(color=colors.get(line_name), width=7.5),
         hoverinfo="skip"
     ))
+
+p2_x, p2_y, p2_ang = sample_line_points(LINES_PATH.get("2호선"), step=1.45)
+fig.add_trace(go.Scatter(
+    x=p2_x, y=p2_y, mode="markers", showlegend=False, hoverinfo="skip",
+    marker=dict(symbol="line-ns", size=6.5, angle=tuple(-a + 45 for a in p2_ang), line=dict(color="#FFFFFF", width=2.2))
+))
+
+p3_x, p3_y, p3_ang = sample_line_points(LINES_PATH.get("3호선"), step=1.35)
+fig.add_trace(go.Scatter(
+    x=p3_x, y=p3_y, mode="markers", showlegend=False, hoverinfo="skip",
+    marker=dict(symbol="line-ns", size=6.0, angle=tuple(-a for a in p3_ang), line=dict(color="#FFFFFF", width=2.2))
+))
+
+p4_x, p4_y, p4_ang = sample_line_points(LINES_PATH.get("4호선"), step=1.45)
+fig.add_trace(go.Scatter(
+    x=p4_x, y=p4_y, mode="markers", showlegend=False, hoverinfo="skip",
+    marker=dict(symbol="line-ns", size=6.5, angle=tuple(-a - 45 for a in p4_ang), line=dict(color="#FFFFFF", width=2.2))
+))
+
+kj_coords = LINES_PATH.get("경전철")
+fig.add_trace(go.Scatter(
+    x=tuple(x for x, y in kj_coords), y=tuple(y for x, y in kj_coords),
+    mode="lines", showlegend=False, hoverinfo="skip",
+    line=dict(color="#FFFFFF", width=2.2)
+))
+
+pd_x, pd_y, _ = sample_line_points(LINES_PATH.get("동해선"), step=1.6)
+fig.add_trace(go.Scatter(
+    x=pd_x, y=pd_y, mode="markers", showlegend=False, hoverinfo="skip",
+    marker=dict(symbol="circle", size=4.2, color="#FFFFFF")
+))
 
 st_names = tuple(STATIONS.keys())
 st_xs = tuple(STATIONS.get(s).__getitem__(0) for s in st_names)
 st_ys = tuple(STATIONS.get(s).__getitem__(1) for s in st_names)
 st_positions = tuple(STATIONS.get(s).__getitem__(5) for s in st_names)
 single_badges = tuple(STATIONS.get(s).__getitem__(6) for s in st_names)
+st_symbols = tuple(get_station_symbol(STATIONS.get(s)) for s in st_names)
 
 fig.add_trace(go.Scatter(
     x=st_xs, y=st_ys,
@@ -313,11 +364,12 @@ fig.add_trace(go.Scatter(
     textposition=st_positions,
     textfont=dict(size=12, color=current_palette.get("text"), family="Malgun Gothic, AppleGothic, sans-serif"),
     marker=dict(
-        size=tuple(20 if STATIONS.get(s).__getitem__(4) else 16 for s in st_names),
+        symbol=st_symbols,
+        size=tuple(20 if STATIONS.get(s).__getitem__(4) else 18 for s in st_names),
         color=tuple("rgba(0,0,0,0)" if STATIONS.get(s).__getitem__(4) else "#FFFFFF" for s in st_names),
         line=dict(
             color=tuple("rgba(0,0,0,0)" if STATIONS.get(s).__getitem__(4) else get_station_border_color(STATIONS.get(s)) for s in st_names),
-            width=3.0
+            width=3.2
         )
     ),
     hovertemplate="<b>%{text}역</b> (클릭하여 정보 열기)<extra></extra>"
@@ -329,7 +381,7 @@ fig.add_trace(go.Scatter(
     showlegend=False,
     text=single_badges,
     textposition="middle center",
-    textfont=dict(size=9, color="#111111", family="Malgun Gothic, AppleGothic, sans-serif"),
+    textfont=dict(size=8.5, color="#111111", family="Malgun Gothic, AppleGothic, sans-serif"),
     hoverinfo="skip"
 ))
 
@@ -365,7 +417,7 @@ fig.update_layout(
         orientation="h",
         yanchor="bottom", y=0.01,
         xanchor="left", x=0.01,
-        itemwidth=55,
+        itemwidth=45,
         font=dict(size=12, family="Malgun Gothic, AppleGothic, sans-serif"),
         bgcolor="rgba(255,255,255,0.95)",
         bordercolor="#DDDDDD",
@@ -423,7 +475,7 @@ st.components.v1.html("""
 
 if selection and selection.selection and selection.selection.points:
     pt = selection.selection.points.__getitem__(0)
-    if pt.get("curve_number") == 12:
+    if pt.get("curve_number") == 17:
         idx = pt.get("point_index")
         chosen_station = st_names.__getitem__(idx)
         click_token = f"{chosen_station}_{st.session_state.color_mode}_{pt}"
