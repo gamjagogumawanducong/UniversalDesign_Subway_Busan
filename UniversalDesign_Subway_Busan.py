@@ -146,8 +146,8 @@ with col_map:
 
     # 7-1. Edge(노선 선분) 그리기
     for line_name, coords in LINES_PATH.items():
-        xs = [p for p in coords]
-        ys = [p for p in coords]
+        xs = [p[0] for p in coords]
+        ys = [p[1] for p in coords]
         fig.add_trace(go.Scatter(
             x=xs, y=ys,
             mode="lines",
@@ -158,11 +158,11 @@ with col_map:
 
     # 7-2. Vertex(역 원형 마커) 그리기
     st_names = list(STATIONS.keys())
-    st_xs = [STATIONS[s] for s in st_names]
-    st_ys = [STATIONS[s] for s in st_names]
-    st_sizes = [16 if STATIONS[s] else 12 for s in st_names]
-    st_border_colors = ["#111111" if STATIONS[s] else colors[STATIONS[s].split(" ")] for s in st_names]
-    st_positions = [STATIONS[s] for s in st_names]
+    st_xs = [STATIONS[s][0] for s in st_names]
+    st_ys = [STATIONS[s][1] for s in st_names]
+    st_sizes = [16 if STATIONS[s][5] else 12 for s in st_names]
+    st_border_colors = ["#111111" if STATIONS[s][5] else colors[STATIONS[s][2].split(" ")[0]] for s in st_names]
+    st_positions = [STATIONS[s][6] for s in st_names]
 
     fig.add_trace(go.Scatter(
         x=st_xs, y=st_ys,
@@ -183,8 +183,8 @@ with col_map:
     fig.update_layout(
         plot_bgcolor=current_palette["bg"],
         paper_bgcolor=current_palette["bg"],
-        xaxis=dict(visible=False, range=, fixedrange=False),
-        yaxis=dict(visible=False, range=, fixedrange=False, scaleanchor="x", scaleratio=1),
+        xaxis=dict(visible=False, range=[0, 100], fixedrange=False),
+        yaxis=dict(visible=False, range=[0, 95], fixedrange=False, scaleanchor="x", scaleratio=1),
         height=720,
         margin=dict(l=10, r=10, t=10, b=10),
         legend=dict(
@@ -209,8 +209,8 @@ with col_map:
     )
 
     if clicked:
-        cx, cy = clicked["x"], clicked["y"]
-        closest = min(st_names, key=lambda s: (STATIONS[s] - cx)**2 + (STATIONS[s] - cy)**2)
+        cx, cy = clicked[0]["x"], clicked[0]["y"]
+        closest = min(st_names, key=lambda s: (STATIONS[s][0] - cx)**2 + (STATIONS[s][1] - cy)**2)
         if st.session_state.selected_station != closest:
             st.session_state.selected_station = closest
             st.rerun()
