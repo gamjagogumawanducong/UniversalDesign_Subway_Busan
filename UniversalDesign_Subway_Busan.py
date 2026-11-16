@@ -3,22 +3,28 @@ import streamlit as st
 import plotly.graph_objects as go
 from streamlit_plotly_events import plotly_events
 
+# 1. 페이지 설정 (노트북 한 화면에 스크롤 없이 꽉 차게)
 st.set_page_config(layout="wide", page_title="부산 도시철도 유니버설 노선도")
 
 st.markdown("""
     <style>
         .block-container {
-            padding-top: 1.2rem;
+            padding-top: 0.8rem;
             padding-bottom: 0rem;
-            padding-left: 1.8rem;
-            padding-right: 1.8rem;
+            padding-left: 1.5rem;
+            padding-right: 1.5rem;
+            max-width: 100%;
+        }
+        header[data-testid="stHeader"] {
+            height: 2.2rem;
         }
         div[data-testid="stVerticalBlock"] > div {
-            gap: 0.5rem;
+            gap: 0.35rem;
         }
     </style>
 """, unsafe_allow_html=True)
 
+# 2. 색각 유형별 컬러 팔레트 및 색채학적 설계 근거
 PALETTES = {
     "기본": {
         "colors": {
@@ -27,7 +33,7 @@ PALETTES = {
         },
         "bg": "#FFFFFF",
         "text": "#111111",
-        "desc": "부산교통공사 공식 지정 색상입니다. 일반 삼색형 색각(L·M·S 추상체 정상) 기준의 표준 노선도입니다."
+        "desc": "부산교통공사 공식 지정 색상 (L·M·S 추상체 정상 삼색형 색각 기준)"
     },
     "적록색맹용": {
         "colors": {
@@ -36,7 +42,7 @@ PALETTES = {
         },
         "bg": "#FFFFFF",
         "text": "#111111",
-        "desc": "L·M 추상체 결핍(적록색맹) 대응 팔레트입니다. 혼동되기 쉬운 적·녹 계열을 배제하고 파랑-노랑 보색 대비와 명도 차이를 극대화했습니다."
+        "desc": "L·M 추상체 결핍(적록색맹) 대응: 적·녹 혼동을 배제한 파랑-노랑 대비 및 명도 차이 적용"
     },
     "청황색맹용": {
         "colors": {
@@ -45,7 +51,7 @@ PALETTES = {
         },
         "bg": "#FFFFFF",
         "text": "#111111",
-        "desc": "S 추상체 결핍(청황색맹) 대응 팔레트입니다. 파랑-노랑 축의 혼동을 막기 위해 진홍(Magenta)과 청록(Cyan) 계열의 대비를 적용했습니다."
+        "desc": "S 추상체 결핍(청황색맹) 대응: 파랑-노랑 축 혼동을 피하는 진홍(Magenta)-청록(Cyan) 대비 적용"
     },
     "전색맹용": {
         "colors": {
@@ -54,7 +60,7 @@ PALETTES = {
         },
         "bg": "#FFFFFF",
         "text": "#111111",
-        "desc": "추상체 기능 저하(전색맹) 대응 팔레트입니다. 색상 대신 단계별 명도(Luminance) 대비와 선 패턴(실선·점선·파선)으로 노선을 구분합니다."
+        "desc": "전색맹(추상체 기능 저하) 대응: 20% 이상 벌린 단계별 명도(Luminance) 대비 + 선 패턴(실선·점선) 구분"
     }
 }
 
@@ -65,14 +71,19 @@ LINE_DASH = {
     "전색맹용": {"1호선": "solid", "2호선": "dash", "3호선": "dot", "4호선": "dashdot", "경전철": "longdash", "동해선": "longdashdot"},
 }
 
+# 3. 세션 상태 초기화
 if "color_mode" not in st.session_state:
     st.session_state.color_mode = "기본"
-if "selected_station" not in st.session_state:
-    st.session_state.selected_station = "서면"
+if "last_click_id" not in st.session_state:
+    st.session_state.last_click_id = None
 
-col_title, col_b1, col_b2, col_b3 = st.columns((6.1, 1.3, 1.3, 1.3))
+# 4. 상단 바: 제목 + 현재 색각 설계 요약 + 우측 상단 동적 전환 버튼 3개
+col_title, col_b1, col_b2, col_b3 = st.columns((6.4, 1.2, 1.2, 1.2))
+current_palette = PALETTES.get(st.session_state.color_mode)
+
 with col_title:
-    st.markdown(f"### 🚇 부산 도시철도 유니버설 노선도 &nbsp; `현재 모드: {st.session_state.color_mode}`")
+    st.markdown(f"#### 🚇 부산 도시철도 유니버설 노선도 &nbsp; `현재: {st.session_state.color_mode}`")
+    st.caption(f"🎨 {current_palette.get('desc')}")
 
 all_modes = ("기본", "적록색맹용", "청황색맹용", "전색맹용")
 available_modes = tuple(m for m in all_modes if m != st.session_state.color_mode)
@@ -83,38 +94,51 @@ for col, mode_name in zip((col_b1, col_b2, col_b3), available_modes):
             st.session_state.color_mode = mode_name
             st.rerun()
 
+# 5. 노트북 가로 화면(16:9)에 꽉 차도록 압축·재설계한 노선 좌표 (X: 0~120, Y: 0~65)
 LINES_PATH = {
-    "1호선": ((10, 22), (10, 8), (12, 6), (48, 6), (50, 8), (50, 85)),
-    "2호선": ((30, 85), (30, 32), (33, 29), (53, 29), (55, 27), (55, 14), (57, 12), (68, 12), (70, 14), (70, 50), (88, 50), (90, 52), (90, 56)),
-    "3호선": ((21, 50), (23, 52), (45, 52), (47, 50), (47, 45), (50, 42), (68, 42), (70, 40)),
-    "4호선": ((45, 48), (47, 50), (68, 50), (70, 52), (70, 85)),
-    "경전철": ((11, 85), (11, 56), (13, 54), (20, 50), (20, 35), (22, 33), (28, 33), (30, 35)),
-    "동해선": ((48, 35), (50, 37), (50, 48), (52, 50), (76, 50), (78, 52), (78, 82), (80, 84), (92, 84))
+    "1호선": ((12, 18), (12, 8), (15, 6), (55, 6), (58, 8), (58, 58)),
+    "2호선": ((36, 58), (36, 24), (39, 21), (63, 21), (66, 18), (66, 12), (69, 10), (80, 10), (83, 12), (83, 36), (105, 36), (108, 39), (108, 43)),
+    "3호선": ((24, 36), (27, 38), (51, 38), (54, 36), (54, 32), (58, 29), (80, 29), (83, 27)),
+    "4호선": ((51, 34), (54, 36), (80, 36), (83, 38), (83, 58)),
+    "경전철": ((12, 58), (12, 41), (15, 39), (24, 36), (24, 26), (27, 24), (34, 24), (36, 26)),
+    "동해선": ((55, 24), (58, 26), (58, 34), (61, 36), (91, 36), (94, 38), (94, 55), (97, 57), (112, 57))
 }
 
+# 6. 주요 역(Vertex) 데이터 (행선지 방면 안내 포함)
+# 형식: "역이름": (x, y, 호선목록, 역번호, 출구수, 환승여부, 라벨위치, 방면안내)
 STATIONS = {
-    "다대포해수욕장": (10, 22, "1호선", "095", "4개", False, "middle left"),
-    "서면": (50, 29, "1호선 · 2호선", "119 / 219", "15개", True, "bottom right"),
-    "연산": (50, 42, "1호선 · 3호선", "123 / 305", "17개", True, "bottom right"),
-    "교대": (50, 48, "1호선 · 동해선", "124 / K113", "8개", True, "top right"),
-    "동래": (50, 52, "1호선 · 4호선", "125 / 402", "4개", True, "top left"),
-    "노포": (50, 85, "1호선", "134", "3개", False, "middle left"),
-    "양산": (30, 85, "2호선", "243", "4개", False, "middle right"),
-    "덕천": (30, 52, "2호선 · 3호선", "233 / 313", "12개", True, "bottom right"),
-    "사상": (30, 35, "2호선 · 부산김해경전철", "227 / 1", "6개", True, "bottom left"),
-    "수영": (70, 40, "2호선 · 3호선", "208 / 301", "17개", True, "middle right"),
-    "벡스코": (78, 50, "2호선 · 동해선", "205 / K119", "9개", True, "bottom right"),
-    "장산": (90, 56, "2호선", "201", "14개", False, "top left"),
-    "대저": (21, 50, "3호선 · 부산김해경전철", "317 / 7", "3개", True, "middle left"),
-    "미남": (45, 52, "3호선 · 4호선", "309 / 401", "14개", True, "top left"),
-    "거제": (47, 45, "3호선 · 동해선", "306 / K112", "8개", True, "middle left"),
-    "안평": (70, 85, "4호선", "414", "4개", False, "middle right"),
-    "가야대": (11, 85, "부산김해경전철", "21", "2개", False, "middle right"),
-    "부전": (48, 35, "동해선 (1호선 인근)", "K110", "2개", False, "middle left"),
-    "태화강": (92, 84, "동해선", "K132", "2개", False, "top center"),
+    # 1호선
+    "다대포해수욕장": (12, 18, "1호선", "095", "4개", False, "top center", "1호선 기점 → 노포 행"),
+    "서면": (58, 21, "1호선 · 2호선", "119 / 219", "15개", True, "bottom right", "1호선: 다대포해수욕장 행 ↔ 노포 행 / 2호선: 장산 행 ↔ 양산 행"),
+    "연산": (58, 29, "1호선 · 3호선", "123 / 305", "17개", True, "bottom right", "1호선: 다대포해수욕장 행 ↔ 노포 행 / 3호선: 수영 행 ↔ 대저 행"),
+    "교대": (58, 34, "1호선 · 동해선", "124 / K113", "8개", True, "top right", "1호선: 다대포해수욕장 행 ↔ 노포 행 / 동해선: 부전 행 ↔ 태화강 행"),
+    "동래": (58, 38, "1호선 · 4호선", "125 / 402", "4개", True, "top left", "1호선: 다대포해수욕장 행 ↔ 노포 행 / 4호선: 미남 행 ↔ 안평 행"),
+    "노포": (58, 58, "1호선", "134", "3개", False, "middle left", "1호선 종점 → 다대포해수욕장 행"),
+
+    # 2호선
+    "양산": (36, 58, "2호선", "243", "4개", False, "middle right", "2호선 종점 → 장산 행"),
+    "덕천": (36, 38, "2호선 · 3호선", "233 / 313", "12개", True, "bottom right", "2호선: 장산 행 ↔ 양산 행 / 3호선: 수영 행 ↔ 대저 행"),
+    "사상": (36, 26, "2호선 · 부산김해경전철", "227 / 1", "6개", True, "bottom left", "2호선: 장산 행 ↔ 양산 행 / 경전철 기점 → 가야대 행"),
+    "수영": (83, 27, "2호선 · 3호선", "208 / 301", "17개", True, "middle right", "2호선: 장산 행 ↔ 양산 행 / 3호선 기점 → 대저 행"),
+    "벡스코": (94, 36, "2호선 · 동해선", "205 / K119", "9개", True, "bottom right", "2호선: 장산 행 ↔ 양산 행 / 동해선: 부전 행 ↔ 태화강 행"),
+    "장산": (108, 43, "2호선", "201", "14개", False, "top center", "2호선 기점 → 양산 행"),
+
+    # 3호선
+    "대저": (24, 36, "3호선 · 부산김해경전철", "317 / 7", "3개", True, "middle left", "3호선 종점 → 수영 행 / 경전철: 사상 행 ↔ 가야대 행"),
+    "미남": (51, 38, "3호선 · 4호선", "309 / 401", "14개", True, "top left", "3호선: 수영 행 ↔ 대저 행 / 4호선 기점 → 안평 행"),
+    "거제": (54, 32, "3호선 · 동해선", "306 / K112", "8개", True, "middle left", "3호선: 수영 행 ↔ 대저 행 / 동해선: 부전 행 ↔ 태화강 행"),
+
+    # 4호선
+    "안평": (83, 58, "4호선", "414", "4개", False, "middle right", "4호선 종점 → 미남 행"),
+
+    # 부산김해경전철
+    "가야대": (12, 58, "부산김해경전철", "21", "2개", False, "middle right", "부산김해경전철 종점 → 사상 행"),
+
+    # 동해선
+    "부전": (55, 24, "동해선 (1호선 인근)", "K110", "2개", False, "middle left", "동해선 기점 → 태화강 행"),
+    "태화강": (112, 57, "동해선", "K132", "2개", False, "top center", "동해선 종점 → 부전 행"),
 }
 
-current_palette = PALETTES.get(st.session_state.color_mode)
 colors = current_palette.get("colors")
 dashes = LINE_DASH.get(st.session_state.color_mode)
 
@@ -127,92 +151,17 @@ def get_station_border_color(station_tuple):
         first_line = "경전철"
     return colors.get(first_line, "#111111")
 
-col_map, col_info = st.columns((7.6, 2.4))
+# 7. 나무위키 주석 스타일의 팝업 다이얼로그 정의
+@st.dialog("🚉 역 상세 정보 안내", width="small")
+def show_station_popup(station_name):
+    x, y, line_info, st_num, exits, is_transfer, _, direction_info = STATIONS.get(station_name)
 
-with col_map:
-    fig = go.Figure()
-
-    for line_name, coords in LINES_PATH.items():
-        xs = tuple(x for x, y in coords)
-        ys = tuple(y for x, y in coords)
-        fig.add_trace(go.Scatter(
-            x=xs, y=ys,
-            mode="lines",
-            name=line_name,
-            line=dict(color=colors.get(line_name), width=7.5, dash=dashes.get(line_name)),
-            hoverinfo="skip"
-        ))
-
-    st_names = tuple(STATIONS.keys())
-    st_xs = tuple(STATIONS.get(s).__getitem__(0) for s in st_names)
-    st_ys = tuple(STATIONS.get(s).__getitem__(1) for s in st_names)
-    st_sizes = tuple(16 if STATIONS.get(s).__getitem__(5) else 12 for s in st_names)
-    st_border_colors = tuple(get_station_border_color(STATIONS.get(s)) for s in st_names)
-    st_positions = tuple(STATIONS.get(s).__getitem__(6) for s in st_names)
-
-    fig.add_trace(go.Scatter(
-        x=st_xs, y=st_ys,
-        mode="markers+text",
-        name="주요 역 (클릭)",
-        text=st_names,
-        textposition=st_positions,
-        textfont=dict(size=12, color=current_palette.get("text"), family="Malgun Gothic, AppleGothic, sans-serif"),
-        marker=dict(
-            size=st_sizes,
-            color="#FFFFFF",
-            line=dict(color=st_border_colors, width=3.5)
-        ),
-        hovertemplate="<b>%{text}역</b><br>클릭하여 상세정보 보기<extra></extra>"
-    ))
-
-    fig.update_layout(
-        plot_bgcolor=current_palette.get("bg"),
-        paper_bgcolor=current_palette.get("bg"),
-        xaxis=dict(visible=False, range=(0, 100), fixedrange=False),
-        yaxis=dict(visible=False, range=(0, 95), fixedrange=False, scaleanchor="x", scaleratio=1),
-        height=720,
-        margin=dict(l=10, r=10, t=10, b=10),
-        legend=dict(
-            orientation="h",
-            yanchor="bottom", y=0.01,
-            xanchor="left", x=0.01,
-            bgcolor="rgba(255,255,255,0.9)",
-            bordercolor="#DDDDDD",
-            borderwidth=1
-        ),
-        dragmode="pan"
-    )
-
-    clicked = plotly_events(
-        fig,
-        click_event=True,
-        hover_event=False,
-        select_event=False,
-        override_height=720,
-        key=f"map_{st.session_state.color_mode}"
-    )
-
-    if clicked:
-        first_click = clicked.__getitem__(0)
-        cx, cy = first_click.get("x"), first_click.get("y")
-        closest = min(st_names, key=lambda s: (STATIONS.get(s).__getitem__(0) - cx)**2 + (STATIONS.get(s).__getitem__(1) - cy)**2)
-        if st.session_state.selected_station != closest:
-            st.session_state.selected_station = closest
-            st.rerun()
-
-with col_info:
-    sel = st.session_state.selected_station
-    x, y, line_info, st_num, exits, is_transfer, _ = STATIONS.get(sel)
-
-    st.markdown(f"#### 📍 {sel}역")
-    if is_transfer:
-        st.caption("🔄 핵심 환승역")
-    else:
-        st.caption("🚉 기점 / 종점")
+    badge = "🔄 핵심 환승역" if is_transfer else "🚩 기점 / 종점"
+    st.markdown(f"### {station_name}역 &nbsp; `{badge}`")
 
     img_path = None
     for ext in ("jpg", "png", "jpeg"):
-        candidate = os.path.join("images", f"{sel}.{ext}")
+        candidate = os.path.join("images", f"{station_name}.{ext}")
         if os.path.exists(candidate):
             img_path = candidate
             break
@@ -221,16 +170,86 @@ with col_info:
         st.image(img_path, use_container_width=True)
     else:
         st.image(
-            f"https://placehold.co{sel}+Station",
+            f"https://placehold.co{station_name}+Station",
             use_container_width=True
         )
 
     st.markdown("---")
     st.markdown(f"**• 운행 노선:** {line_info}")
+    st.markdown(f"**• 방면(행선지):** {direction_info}")
     st.markdown(f"**• 역 번호:** {st_num}")
     st.markdown(f"**• 출구 개수:** {exits}")
-    st.markdown("---")
 
-    st.markdown(f"**🎨 {st.session_state.color_mode} 설계 기준**")
-    st.info(current_palette.get("desc"))
-    st.caption("💡 노선도의 원(역)을 클릭하면 정보가 바뀌며, 마우스 휠로 확대·축소할 수 있습니다.")
+# 8. 화면 전체 너비(100%)로 벡터 노선도 렌더링 (스크롤 없이 한눈에)
+fig = go.Figure()
+
+for line_name, coords in LINES_PATH.items():
+    xs = tuple(x for x, y in coords)
+    ys = tuple(y for x, y in coords)
+    fig.add_trace(go.Scatter(
+        x=xs, y=ys,
+        mode="lines",
+        name=line_name,
+        line=dict(color=colors.get(line_name), width=7, dash=dashes.get(line_name)),
+        hoverinfo="skip"
+    ))
+
+st_names = tuple(STATIONS.keys())
+st_xs = tuple(STATIONS.get(s).__getitem__(0) for s in st_names)
+st_ys = tuple(STATIONS.get(s).__getitem__(1) for s in st_names)
+st_sizes = tuple(15 if STATIONS.get(s).__getitem__(5) else 12 for s in st_names)
+st_border_colors = tuple(get_station_border_color(STATIONS.get(s)) for s in st_names)
+st_positions = tuple(STATIONS.get(s).__getitem__(6) for s in st_names)
+
+fig.add_trace(go.Scatter(
+    x=st_xs, y=st_ys,
+    mode="markers+text",
+    name="역 선택 (클릭)",
+    text=st_names,
+    textposition=st_positions,
+    textfont=dict(size=12, color=current_palette.get("text"), family="Malgun Gothic, AppleGothic, sans-serif"),
+    marker=dict(
+        size=st_sizes,
+        color="#FFFFFF",
+        line=dict(color=st_border_colors, width=3.2)
+    ),
+    hovertemplate="<b>%{text}역</b> (클릭하여 정보 열기)<extra></extra>"
+))
+
+fig.update_layout(
+    plot_bgcolor=current_palette.get("bg"),
+    paper_bgcolor=current_palette.get("bg"),
+    xaxis=dict(visible=False, range=(2, 122), fixedrange=False),
+    yaxis=dict(visible=False, range=(2, 64), fixedrange=False),
+    height=570,
+    margin=dict(l=5, r=5, t=5, b=5),
+    hovermode="closest",
+    hoverdistance=15,
+    legend=dict(
+        orientation="h",
+        yanchor="bottom", y=0.01,
+        xanchor="left", x=0.01,
+        bgcolor="rgba(255,255,255,0.92)",
+        bordercolor="#DDDDDD",
+        borderwidth=1
+    ),
+    dragmode="pan"
+)
+
+clicked = plotly_events(
+    fig,
+    click_event=True,
+    hover_event=False,
+    select_event=False,
+    override_height=570,
+    key=f"map_{st.session_state.color_mode}"
+)
+
+if clicked:
+    first_click = clicked.__getitem__(0)
+    cx, cy = first_click.get("x"), first_click.get("y")
+    click_token = f"{cx}_{cy}_{st.session_state.color_mode}"
+    closest = min(st_names, key=lambda s: (STATIONS.get(s).__getitem__(0) - cx)**2 + (STATIONS.get(s).__getitem__(1) - cy)**2)
+    if st.session_state.last_click_id != click_token:
+        st.session_state.last_click_id = click_token
+        show_station_popup(closest)
