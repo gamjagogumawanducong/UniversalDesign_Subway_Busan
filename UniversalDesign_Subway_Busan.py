@@ -1,5 +1,5 @@
 import os
-import urllib.parse
+import math
 import streamlit as st
 import plotly.graph_objects as go
 
@@ -234,14 +234,36 @@ colors = current_palette.get("colors")
 dashes = LINE_DASH.get(st.session_state.color_mode)
 outline_color = current_palette.get("outline")
 
-def make_taegeuk_svg_uri(color1, color2):
-    svg = f"""<svg xmlns="http://w3.org" viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r="46" fill="#FFFFFF" stroke="#111111" stroke-width="6"/>
-        <path d="M 50 8 A 42 42 0 0 1 92 50 A 21 21 0 0 1 50 50 A 21 21 0 0 0 8 50 A 42 42 0 0 1 50 8 Z" fill="{color1}"/>
-        <path d="M 92 50 A 42 42 0 0 1 8 50 A 21 21 0 0 1 50 50 A 21 21 0 0 0 92 50 Z" fill="{color2}"/>
-        <circle cx="50" cy="50" r="42" fill="none" stroke="#111111" stroke-width="4"/>
-    </svg>"""
-    return "data:image/svg+xml;utf8," + urllib.parse.quote(svg)
+def get_taegeuk_halves(cx, cy, rx=0.82, ry=0.82):
+    top_x, top_y = [], []
+    for i in range(19):
+        a = math.pi * i / 18
+        top_x.append(cx + rx * math.cos(a))
+        top_y.append(cy + ry * math.sin(a))
+    for i in range(1, 13):
+        a = math.pi + math.pi * i / 12
+        top_x.append(cx - rx * 0.5 + rx * 0.5 * math.cos(a))
+        top_y.append(cy + ry * 0.5 * math.sin(a))
+    for i in range(1, 13):
+        a = math.pi - math.pi * i / 12
+        top_x.append(cx + rx * 0.5 + rx * 0.5 * math.cos(a))
+        top_y.append(cy + ry * 0.5 * math.sin(a))
+
+    bot_x, bot_y = [], []
+    for i in range(19):
+        a = -math.pi * i / 18
+        bot_x.append(cx + rx * math.cos(a))
+        bot_y.append(cy + ry * math.sin(a))
+    for i in range(1, 13):
+        a = math.pi + math.pi * i / 12
+        bot_x.append(cx - rx * 0.5 + rx * 0.5 * math.cos(a))
+        bot_y.append(cy + ry * 0.5 * math.sin(a))
+    for i in range(1, 13):
+        a = math.pi - math.pi * i / 12
+        bot_x.append(cx + rx * 0.5 + rx * 0.5 * math.cos(a))
+        bot_y.append(cy + ry * 0.5 * math.sin(a))
+
+    return (top_x, top_y), (bot_x, bot_y)
 
 def get_station_border_color(station_tuple):
     is_transfer = station_tuple.__getitem__(4)
@@ -303,7 +325,7 @@ for line_name, coords in LINES_PATH.items():
 st_names = tuple(STATIONS.keys())
 st_xs = tuple(STATIONS.get(s).__getitem__(0) for s in st_names)
 st_ys = tuple(STATIONS.get(s).__getitem__(1) for s in st_names)
-st_sizes = tuple(19 if STATIONS.get(s).__getitem__(4) else 16 for s in st_names)
+st_sizes = tuple(21 if STATIONS.get(s).__getitem__(4) else 16 for s in st_names)
 st_border_colors = tuple(get_station_border_color(STATIONS.get(s)) for s in st_names)
 st_positions = tuple(STATIONS.get(s).__getitem__(5) for s in st_names)
 st_badges = tuple(STATIONS.get(s).__getitem__(6) for s in st_names)
@@ -318,10 +340,38 @@ fig.add_trace(go.Scatter(
     marker=dict(
         size=st_sizes,
         color="#FFFFFF",
-        line=dict(color=st_border_colors, width=3.2)
+        line=dict(color=st_border_colors, width=3.0)
     ),
     hovertemplate="<b>%{text}역</b> (클릭하여 정보 열기)<extra></extra>"
 ))
+
+for s in st_names:
+    st_data = STATIONS.get(s)
+    if st_data.__getitem__(4):
+        sx = st_data.__getitem__(0)
+        sy = st_data.__getitem__(1)
+        pair = st_data.__getitem__(7)
+        c1 = colors.get(pair.__getitem__(0))
+        c2 = colors.get(pair.__getitem__(1))
+        (tx, ty), (bx, by) = get_taegeuk_halves(sx, sy, rx=0.72, ry=0.72)
+        fig.add_trace(go.Scatter(
+            x=tx, y=ty,
+            mode="lines",
+            fill="toself",
+            fillcolor=c1,
+            line=dict(color="#111111", width=0.8),
+            showlegend=False,
+            hoverinfo="skip"
+        ))
+        fig.add_trace(go.Scatter(
+            x=bx, y=by,
+            mode="lines",
+            fill="toself",
+            fillcolor=c2,
+            line=dict(color="#111111", width=0.8),
+            showlegend=False,
+            hoverinfo="skip"
+        ))
 
 fig.add_trace(go.Scatter(
     x=st_xs, y=st_ys,
@@ -333,28 +383,9 @@ fig.add_trace(go.Scatter(
     hoverinfo="skip"
 ))
 
-taegeuk_images = []
-for s in st_names:
-    st_data = STATIONS.get(s)
-    if st_data.__getitem__(4):
-        sx = st_data.__getitem__(0)
-        sy = st_data.__getitem__(1)
-        pair = st_data.__getitem__(7)
-        c1 = colors.get(pair.__getitem__(0))
-        c2 = colors.get(pair.__getitem__(1))
-        taegeuk_images.append(dict(
-            source=make_taegeuk_svg_uri(c1, c2),
-            xref="x", yref="y",
-            x=sx, y=sy,
-            sizex=2.6, sizey=2.6,
-            xanchor="center", yanchor="middle",
-            layer="above"
-        ))
-
 fig.update_layout(
     plot_bgcolor=current_palette.get("bg"),
     paper_bgcolor=current_palette.get("bg"),
-    images=taegeuk_images,
     xaxis=dict(visible=False, range=(2, 124), fixedrange=False),
     yaxis=dict(visible=False, range=(2, 64), fixedrange=False, scaleanchor="x", scaleratio=0.52),
     height=550,
