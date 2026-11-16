@@ -25,24 +25,24 @@ st.markdown("""
         .header-wrap {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 14px;
             flex-wrap: wrap;
         }
         .header-title {
-            font-size: 1.45rem;
+            font-size: 1.85rem;
             font-weight: 800;
             color: #111827;
             letter-spacing: -0.02em;
             margin: 0;
-            line-height: 1.3;
+            line-height: 1.25;
         }
         .mode-badge {
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            padding: 5px 14px;
+            padding: 6px 15px;
             border-radius: 999px;
-            font-size: 0.88rem;
+            font-size: 0.92rem;
             font-weight: 700;
             letter-spacing: -0.01em;
             box-shadow: 0 1px 3px rgba(0,0,0,0.08);
