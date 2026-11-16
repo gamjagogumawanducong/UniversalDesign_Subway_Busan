@@ -1,7 +1,6 @@
 import os
 import streamlit as st
 import plotly.graph_objects as go
-from streamlit_plotly_events import plotly_events
 
 st.set_page_config(layout="wide", page_title="부산 도시철도 유니버설 노선도")
 
@@ -20,7 +19,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 4호선(#0054A6)과 동해선(#217DCB) 공식 색상 반영 및 색각 모드별 고명도대비 팔레트
+st.components.v1.html('<script src="https://plot.ly"></script>', height=0)
+
 PALETTES = {
     "기본": {
         "colors": {
@@ -28,47 +28,31 @@ PALETTES = {
             "4호선": "#0054A6", "경전철": "#875CAC", "동해선": "#217DCB"
         },
         "bg": "#FFFFFF",
-        "text": "#111111",
-        "desc": "부산교통공사 공식 지정 색상 (L·M·S 추상체 정상 삼색형 색각 기준)"
+        "text": "#111111"
     },
     "적록색맹용": {
         "colors": {
-            "1호선": "#E69F00",  # 고명도 황색 (L*=68)
-            "2호선": "#005AB5",  # 저명도 진청색 (L*=38)
-            "3호선": "#56B4E9",  # 중명도 하늘색 (L*=70)
-            "4호선": "#1A237E",  # 초저명도 남색 (L*=20)
-            "경전철": "#D4A017", # 중명도 황토색 (L*=65)
-            "동해선": "#88CCEE"  # 고명도 담청색 (L*=78)
+            "1호선": "#E69F00", "2호선": "#005AB5", "3호선": "#56B4E9",
+            "4호선": "#1A237E", "경전철": "#D4A017", "동해선": "#88CCEE"
         },
         "bg": "#FFFFFF",
-        "text": "#111111",
-        "desc": "L·M 추상체 결핍 대응: 파랑-노랑 보색 축 + 교차 노선 간 명도(L*) 30% 이상 차등 설계"
+        "text": "#111111"
     },
     "청황색맹용": {
         "colors": {
-            "1호선": "#C2185B",  # 중저명도 진홍/마젠타 (L*=42)
-            "2호선": "#00838F",  # 중명도 딥 시안 (L*=50)
-            "3호선": "#F48FB1",  # 고명도 라이트 핑크 (L*=72)
-            "4호선": "#111111",  # 최저명도 블랙 (L*=10)
-            "경전철": "#6A1B4D", # 저명도 딥 버건디 (L*=28)
-            "동해선": "#4DD0E1"  # 고명도 밝은 시안 (L*=78)
+            "1호선": "#C2185B", "2호선": "#00838F", "3호선": "#F48FB1",
+            "4호선": "#111111", "경전철": "#6A1B4D", "동해선": "#4DD0E1"
         },
         "bg": "#FFFFFF",
-        "text": "#111111",
-        "desc": "S 추상체 결핍 대응: 청황 축 배제 후 마젠타-시안 대비 + 동해선/2호선 명도 격차 극대화"
+        "text": "#111111"
     },
     "전색맹용": {
         "colors": {
-            "1호선": "#111111",  # 명도 10% (검정)
-            "2호선": "#484848",  # 명도 30% (진회색)
-            "3호선": "#767676",  # 명도 50% (중간회색)
-            "4호선": "#9E9E9E",  # 명도 65% (밝은회색)
-            "경전철": "#2E2E2E", # 명도 20% (암회색)
-            "동해선": "#616161"  # 명도 40% (회색)
+            "1호선": "#111111", "2호선": "#484848", "3호선": "#767676",
+            "4호선": "#9E9E9E", "경전철": "#2E2E2E", "동해선": "#616161"
         },
         "bg": "#FFFFFF",
-        "text": "#111111",
-        "desc": "전색맹 대응: 채도 0% 무채색 명도 단계화 + 선 패턴(실선·점선·파선) 이중 부호화 적용"
+        "text": "#111111"
     }
 }
 
@@ -89,7 +73,6 @@ current_palette = PALETTES.get(st.session_state.color_mode)
 
 with col_title:
     st.markdown(f"#### 🚇 부산 도시철도 유니버설 노선도 &nbsp; `현재: {st.session_state.color_mode}`")
-    st.caption(f"🎨 {current_palette.get('desc')}")
 
 all_modes = ("기본", "적록색맹용", "청황색맹용", "전색맹용")
 available_modes = tuple(m for m in all_modes if m != st.session_state.color_mode)
@@ -100,7 +83,6 @@ for col, mode_name in zip((col_b1, col_b2, col_b3), available_modes):
             st.session_state.color_mode = mode_name
             st.rerun()
 
-# 공식 노선도 구조 반영: 2호선(수영-민락-센텀시티-벡스코)과 동해선 분리 및 4호선 안평 종점 정확히 일치
 LINES_PATH = {
     "1호선": ((12, 18), (12, 8), (15, 6), (55, 6), (58, 8), (58, 58)),
     "2호선": ((36, 58), (36, 24), (39, 21), (63, 21), (66, 18), (66, 11), (69, 9), (80, 9), (83, 11), (83, 32), (91, 32), (94, 34), (94, 36), (105, 36), (108, 39), (108, 43)),
@@ -262,10 +244,11 @@ fig.update_layout(
     paper_bgcolor=current_palette.get("bg"),
     xaxis=dict(visible=False, range=(2, 124), fixedrange=False),
     yaxis=dict(visible=False, range=(2, 64), fixedrange=False),
-    height=530,
+    height=550,
     margin=dict(l=5, r=5, t=5, b=5),
     hovermode="closest",
     hoverdistance=15,
+    clickmode="event+select",
     legend=dict(
         orientation="h",
         yanchor="bottom", y=0.01,
@@ -277,20 +260,28 @@ fig.update_layout(
     dragmode="pan"
 )
 
-clicked = plotly_events(
+plotly_config = {
+    "scrollZoom": True,
+    "displaylogo": False,
+    "locale": "ko",
+    "modeBarButtonsToRemove": ["select2d", "lasso2d", "autoScale2d"]
+}
+
+selection = st.plotly_chart(
     fig,
-    click_event=True,
-    hover_event=False,
-    select_event=False,
-    override_height=530,
+    use_container_width=True,
+    config=plotly_config,
+    on_select="rerun",
+    selection_mode="points",
     key=f"map_{st.session_state.color_mode}"
 )
 
-if clicked:
-    first_click = clicked.__getitem__(0)
-    cx, cy = first_click.get("x"), first_click.get("y")
-    click_token = f"{cx}_{cy}_{st.session_state.color_mode}"
-    closest = min(st_names, key=lambda s: (STATIONS.get(s).__getitem__(0) - cx)**2 + (STATIONS.get(s).__getitem__(1) - cy)**2)
-    if st.session_state.last_click_id != click_token:
-        st.session_state.last_click_id = click_token
-        show_station_popup(closest)
+if selection and selection.selection and selection.selection.points:
+    pt = selection.selection.points.__getitem__(0)
+    if pt.get("curve_number") == 6:
+        idx = pt.get("point_index")
+        chosen_station = st_names.__getitem__(idx)
+        click_token = f"{chosen_station}_{st.session_state.color_mode}_{pt}"
+        if st.session_state.last_click_id != click_token:
+            st.session_state.last_click_id = click_token
+            show_station_popup(chosen_station)
