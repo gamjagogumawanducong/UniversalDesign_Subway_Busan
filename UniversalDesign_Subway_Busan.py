@@ -55,7 +55,7 @@ st.markdown("""
             border-radius: 50%;
             display: inline-block;
         }
-        div[data-testid="stButton"] > button {
+        div[data-testid="stHorizontalBlock"]:first-of-type div[data-testid="stButton"] > button {
             border-radius: 999px !important;
             background-color: #F8F9FA !important;
             color: #495057 !important;
@@ -66,12 +66,12 @@ st.markdown("""
             box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
             transition: all 0.15s ease !important;
         }
-        div[data-testid="stButton"] > button:hover {
+        div[data-testid="stHorizontalBlock"]:first-of-type div[data-testid="stButton"] > button:hover {
             background-color: #E9ECEF !important;
             color: #111827 !important;
             border-color: #ADB5BD !important;
         }
-        div[data-testid="stButton"] > button p::before {
+        div[data-testid="stHorizontalBlock"]:first-of-type div[data-testid="stButton"] > button p::before {
             content: "● ";
             font-size: 0.72rem;
             color: #868E96;
@@ -87,7 +87,6 @@ st.markdown("""
             border: 1.5px solid #D1D5DB;
             border-radius: 10px;
             padding: 8px 16px;
-            margin-top: 4px;
             box-shadow: 0 2px 6px rgba(0,0,0,0.06);
         }
         .ud-legend-item {
@@ -165,6 +164,8 @@ if "color_mode" not in st.session_state:
     st.session_state.color_mode = "기본"
 if "last_click_id" not in st.session_state:
     st.session_state.last_click_id = None
+if "zoom_level" not in st.session_state:
+    st.session_state.zoom_level = 1.0
 
 col_title, col_b1, col_b2, col_b3 = st.columns((6.4, 1.2, 1.2, 1.2))
 current_palette = PALETTES.get(st.session_state.color_mode)
@@ -488,9 +489,14 @@ fig.add_trace(go.Scatter(
     hoverinfo="skip"
 ))
 
+half_w = 61.0 / st.session_state.zoom_level
+half_h = 31.0 / st.session_state.zoom_level
+cx, cy = 63.0, 33.0
+
 transfer_svg_uri = load_transfer_svg_base64()
 transfer_images = []
 if transfer_svg_uri:
+    icon_size = 2.1 / st.session_state.zoom_level
     for s in st_names:
         st_data = STATIONS.get(s)
         if st_data.__getitem__(4):
@@ -500,7 +506,7 @@ if transfer_svg_uri:
                 source=transfer_svg_uri,
                 xref="x", yref="y",
                 x=sx, y=sy,
-                sizex=2.1, sizey=2.1,
+                sizex=icon_size, sizey=icon_size,
                 xanchor="center", yanchor="middle",
                 layer="above"
             ))
@@ -509,9 +515,9 @@ fig.update_layout(
     plot_bgcolor=current_palette.get("bg"),
     paper_bgcolor=current_palette.get("bg"),
     images=transfer_images,
-    xaxis=dict(visible=False, range=(2, 124), fixedrange=False),
-    yaxis=dict(visible=False, range=(2, 64), fixedrange=False, scaleanchor="x", scaleratio=0.52),
-    height=510,
+    xaxis=dict(visible=False, range=(cx - half_w, cx + half_w), fixedrange=False),
+    yaxis=dict(visible=False, range=(cy - half_h, cy + half_h), fixedrange=False, scaleanchor="x", scaleratio=0.52),
+    height=500,
     margin=dict(l=5, r=5, t=5, b=5),
     hovermode="closest",
     hoverdistance=15,
@@ -533,91 +539,24 @@ selection = st.plotly_chart(
     config=plotly_config,
     on_select="rerun",
     selection_mode="points",
-    key=f"map_{st.session_state.color_mode}"
+    key=f"map_{st.session_state.color_mode}_{st.session_state.zoom_level}"
 )
 
-st.markdown(build_legend_html(), unsafe_allow_html=True)
-
-st.components.v1.html("""
-<script>
-(function() {
-    const doc = window.parent.document;
-
-    function attachPinchZoom() {
-        const plots = doc.querySelectorAll('.js-plotly-plot');
-        plots.forEach(gd => {
-            if (!gd || gd._pinchBound) return;
-            gd._pinchBound = true;
-            let lastDist = null;
-
-            gd.addEventListener('touchstart', function(e) {
-                if (e.touches.length === 2) {
-                    const dx = e.touches.item(0).clientX - e.touches.item(1).clientX;
-                    const dy = e.touches.item(0).clientY - e.touches.item(1).clientY;
-                    lastDist = Math.hypot(dx, dy);
-                }
-            }, {passive: true});
-
-            gd.addEventListener('touchmove', function(e) {
-                if (e.touches.length === 2 && lastDist && gd._fullLayout) {
-                    e.preventDefault();
-                    const dx = e.touches.item(0).clientX - e.touches.item(1).clientX;
-                    const dy = e.touches.item(0).clientY - e.touches.item(1).clientY;
-                    const newDist = Math.hypot(dx, dy);
-                    if (newDist > 0 && Math.abs(newDist - lastDist) > 2) {
-                        const scale = lastDist / newDist;
-                        lastDist = newDist;
-                        const xa = gd._fullLayout.xaxis;
-                        const ya = gd._fullLayout.yaxis;
-                        const x0 = xa.range.at(0), x1 = xa.range.at(1);
-                        const y0 = ya.range.at(0), y1 = ya.range.at(1);
-                        const cx = (x0 + x1) * 0.5;
-                        const cy = (y0 + y1) * 0.5;
-                        const halfW = (x1 - x0) * 0.5 * scale;
-                        const halfH = (y1 - y0) * 0.5 * scale;
-                        window.parent.Plotly.relayout(gd, {
-                            'xaxis.range': [cx - halfW, cx + halfW],
-                            'yaxis.range': [cy - halfH, cy + halfH]
-                        });
-                    }
-                }
-            }, {passive: false});
-
-            gd.addEventListener('touchend', function(e) {
-                if (e.touches.length < 2) {
-                    lastDist = null;
-                }
-            }, {passive: true});
-        });
-    }
-
-    function lockIconSize() {
-        attachPinchZoom();
-        const plots = doc.querySelectorAll('.js-plotly-plot');
-        plots.forEach(gd => {
-            if (!gd || !gd._fullLayout || !gd._fullLayout.images) return;
-            const xa = gd._fullLayout.xaxis;
-            const ya = gd._fullLayout.yaxis;
-            if (!xa || !ya) return;
-            const spanX = Math.abs(xa.range.at(1) - xa.range.at(0));
-            const spanY = Math.abs(ya.range.at(1) - ya.range.at(0));
-            if (spanX === 0 || spanY === 0) return;
-            const pxPerX = xa._length / spanX;
-            const pxPerY = ya._length / spanY;
-            const targetPx = 20;
-            const newSizeX = targetPx / pxPerX;
-            const newSizeY = targetPx / pxPerY;
-            const imgs = gd.layout.images;
-            if (imgs && imgs.length > 0 && Math.abs(imgs.at(0).sizex - newSizeX) > 0.001) {
-                const updated = imgs.map(im => Object.assign({}, im, {sizex: newSizeX, sizey: newSizeY}));
-                window.parent.Plotly.relayout(gd, {images: updated});
-            }
-        });
-    }
-    setInterval(lockIconSize, 250);
-})();
-</script>
-""", height=0)
+col_leg, col_z1, col_z2, col_z3 = st.columns((7.6, 0.8, 0.8, 0.8))
+with col_leg:
+    st.markdown(build_legend_html(), unsafe_allow_html=True)
+with col_z1:
+    if st.button("➕ 확대", use_container_width=True):
+        st.session_state.zoom_level = min(3.0, st.session_state.zoom_level + 0.4)
+        st.rerun()
+with col_z2:
+    if st.button("➖ 축소", use_container_width=True):
+        st.session_state.zoom_level = max(1.0, st.session_state.zoom_level - 0.4)
+        st.rerun()
+with col_z3:
+    if st.button("↺ 초기화", use_container_width=True):
+        st.session_state.zoom_level = 1.0
+        st.rerun()
 
 if selection and selection.selection and selection.selection.points:
     pt = selection.selection.points.__getitem__(0)
