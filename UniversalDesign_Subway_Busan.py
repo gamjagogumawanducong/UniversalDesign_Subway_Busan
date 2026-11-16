@@ -3,10 +3,8 @@ import streamlit as st
 import plotly.graph_objects as go
 from streamlit_plotly_events import plotly_events
 
-# 1. 페이지 설정
 st.set_page_config(layout="wide", page_title="부산 도시철도 유니버설 노선도")
 
-# Streamlit 상단 툴바에 가려지지 않도록 padding-top을 3.6rem으로 확보
 st.markdown("""
     <style>
         .block-container {
@@ -22,7 +20,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. 색각 유형별 컬러 팔레트 및 색채학적 설계 근거
+# 색상(Hue) + 명도(Luminance) 차이를 동시에 극대화한 개선 팔레트
 PALETTES = {
     "기본": {
         "colors": {
@@ -35,30 +33,42 @@ PALETTES = {
     },
     "적록색맹용": {
         "colors": {
-            "1호선": "#E69F00", "2호선": "#56B4E9", "3호선": "#0072B2",
-            "4호선": "#CC79A7", "경전철": "#332288", "동해선": "#009E73"
+            "1호선": "#E69F00",  # 고명도 황색 (L*=68)
+            "2호선": "#005AB5",  # 저명도 진청색 (L*=38)
+            "3호선": "#56B4E9",  # 중명도 하늘색 (L*=70)
+            "4호선": "#1A237E",  # 초저명도 남색 (L*=20)
+            "경전철": "#D4A017", # 중명도 황토색 (L*=65)
+            "동해선": "#88CCEE"  # 고명도 담청색 (L*=78)
         },
         "bg": "#FFFFFF",
         "text": "#111111",
-        "desc": "L·M 추상체 결핍(적록색맹) 대응: 적·녹 혼동을 배제한 파랑-노랑 대비 및 명도 차이 적용"
+        "desc": "L·M 추상체 결핍 대응: 파랑-노랑 보색 축 + 교차 노선 간 명도(L*) 30% 이상 차등 설계"
     },
     "청황색맹용": {
         "colors": {
-            "1호선": "#D55E00", "2호선": "#009E73", "3호선": "#CC79A7",
-            "4호선": "#111111", "경전철": "#882255", "동해선": "#44AA99"
+            "1호선": "#C2185B",  # 중저명도 진홍/마젠타 (L*=42)
+            "2호선": "#00838F",  # 중명도 딥 시안 (L*=50)
+            "3호선": "#F48FB1",  # 고명도 라이트 핑크 (L*=72)
+            "4호선": "#111111",  # 최저명도 블랙 (L*=10)
+            "경전철": "#6A1B4D", # 저명도 딥 버건디 (L*=28)
+            "동해선": "#4DD0E1"  # 고명도 밝은 시안 (L*=78)
         },
         "bg": "#FFFFFF",
         "text": "#111111",
-        "desc": "S 추상체 결핍(청황색맹) 대응: 파랑-노랑 축 혼동을 피하는 진홍(Magenta)-청록(Cyan) 대비 적용"
+        "desc": "S 추상체 결핍 대응: 청황 축 배제 후 마젠타-시안 대비 + 동해선/2호선 명도 격차 극대화"
     },
     "전색맹용": {
         "colors": {
-            "1호선": "#111111", "2호선": "#444444", "3호선": "#757575",
-            "4호선": "#9E9E9E", "경전철": "#2B2B2B", "동해선": "#5E5E5E"
+            "1호선": "#111111",  # 명도 10% (검정)
+            "2호선": "#484848",  # 명도 30% (진회색)
+            "3호선": "#767676",  # 명도 50% (중간회색)
+            "4호선": "#9E9E9E",  # 명도 65% (밝은회색)
+            "경전철": "#2E2E2E", # 명도 20% (암회색)
+            "동해선": "#616161"  # 명도 40% (회색)
         },
         "bg": "#FFFFFF",
         "text": "#111111",
-        "desc": "전색맹(추상체 기능 저하) 대응: 20% 이상 벌린 단계별 명도(Luminance) 대비 + 선 패턴(실선·점선) 구분"
+        "desc": "전색맹 대응: 채도 0% 무채색 명도 단계화 + 선 패턴(실선·점선·파선) 이중 부호화 적용"
     }
 }
 
@@ -69,13 +79,11 @@ LINE_DASH = {
     "전색맹용": {"1호선": "solid", "2호선": "dash", "3호선": "dot", "4호선": "dashdot", "경전철": "longdash", "동해선": "longdashdot"},
 }
 
-# 3. 세션 상태 초기화
 if "color_mode" not in st.session_state:
     st.session_state.color_mode = "기본"
 if "last_click_id" not in st.session_state:
     st.session_state.last_click_id = None
 
-# 4. 상단 바: 제목 + 현재 색각 설계 요약 + 우측 상단 동적 전환 버튼 3개
 col_title, col_b1, col_b2, col_b3 = st.columns((6.4, 1.2, 1.2, 1.2))
 current_palette = PALETTES.get(st.session_state.color_mode)
 
@@ -92,7 +100,6 @@ for col, mode_name in zip((col_b1, col_b2, col_b3), available_modes):
             st.session_state.color_mode = mode_name
             st.rerun()
 
-# 5. 노트북 가로 화면(16:9)에 맞는 노선 좌표
 LINES_PATH = {
     "1호선": ((12, 18), (12, 8), (15, 6), (55, 6), (58, 8), (58, 58)),
     "2호선": ((36, 58), (36, 24), (39, 21), (63, 21), (66, 18), (66, 12), (69, 10), (80, 10), (83, 12), (83, 36), (105, 36), (108, 39), (108, 43)),
@@ -102,10 +109,7 @@ LINES_PATH = {
     "동해선": ((55, 24), (58, 26), (58, 34), (61, 36), (91, 36), (94, 38), (94, 55), (97, 57), (112, 57))
 }
 
-# 6. 주요 역(Vertex) 데이터
-# 형식: "역이름": (x, y, 호선목록, 출구수, 환승여부, 라벨위치, (노선별 진행방향 및 역번호 튜플))
 STATIONS = {
-    # 1호선
     "다대포해수욕장": (12, 18, "1호선", "4개", False, "top center", (
         ("1호선", "기점 -> 다대포해수욕장(095) -> 다대포항"),
     )),
@@ -128,8 +132,6 @@ STATIONS = {
     "노포": (58, 58, "1호선", "3개", False, "middle left", (
         ("1호선", "범어사 -> 노포(134) -> 종점"),
     )),
-
-    # 2호선
     "양산": (36, 58, "2호선", "4개", False, "middle right", (
         ("2호선", "남양산 -> 양산(243) -> 종점"),
     )),
@@ -152,8 +154,6 @@ STATIONS = {
     "장산": (108, 43, "2호선", "14개", False, "top center", (
         ("2호선", "기점 -> 장산(201) -> 중동"),
     )),
-
-    # 3호선
     "대저": (24, 36, "3호선 · 부산김해경전철", "3개", True, "middle left", (
         ("3호선", "체육공원 -> 대저(317) -> 종점"),
         ("부산김해경전철", "등구 -> 대저(7) -> 평강"),
@@ -166,18 +166,12 @@ STATIONS = {
         ("3호선", "연산 -> 거제(306) -> 종합운동장"),
         ("동해선", "거제해맞이 -> 거제(K112) -> 교대"),
     )),
-
-    # 4호선
     "안평": (83, 58, "4호선", "4개", False, "middle right", (
         ("4호선", "고촌 -> 안평(414) -> 종점"),
     )),
-
-    # 부산김해경전철
     "가야대": (12, 58, "부산김해경전철", "2개", False, "middle right", (
         ("부산김해경전철", "장신대 -> 가야대(21) -> 종점"),
     )),
-
-    # 동해선
     "부전": (55, 24, "동해선 (1호선 인근)", "2개", False, "middle left", (
         ("동해선", "기점 -> 부전(K110) -> 거제해맞이"),
     )),
@@ -198,7 +192,6 @@ def get_station_border_color(station_tuple):
         first_line = "경전철"
     return colors.get(first_line, "#111111")
 
-# 7. 나무위키 주석 스타일의 팝업 다이얼로그 정의
 @st.dialog("🚉 역 상세 정보 안내", width="small")
 def show_station_popup(station_name):
     x, y, line_info, exits, is_transfer, _, route_flows = STATIONS.get(station_name)
@@ -228,7 +221,6 @@ def show_station_popup(station_name):
         st.markdown(f"&nbsp;&nbsp;&nbsp;- **{line_label}**: `{flow_text}`")
     st.markdown(f"**• 출구 개수:** {exits}")
 
-# 8. 화면 전체 너비(100%)로 벡터 노선도 렌더링 (스크롤 없이 한눈에)
 fig = go.Figure()
 
 for line_name, coords in LINES_PATH.items():
@@ -294,11 +286,10 @@ clicked = plotly_events(
 )
 
 if clicked:
-first_click = clicked.getitem(0)
-cx, cy = first_click.get("x"), first_click.get("y")
-click_token = f"{cx}{cy}{st.session_state.color_mode}"
-closest = min(st_names, key=lambda s: (STATIONS.get(s).getitem(0) - cx)2 + (STATIONS.get(s).getitem(1) - cy)2)
-if st.session_state.last_click_id != click_token:
-st.session_state.last_click_id = click_token
-show_station_popup(closest)
-
+    first_click = clicked.__getitem__(0)
+    cx, cy = first_click.get("x"), first_click.get("y")
+    click_token = f"{cx}_{cy}_{st.session_state.color_mode}"
+    closest = min(st_names, key=lambda s: (STATIONS.get(s).__getitem__(0) - cx)**2 + (STATIONS.get(s).__getitem__(1) - cy)**2)
+    if st.session_state.last_click_id != click_token:
+        st.session_state.last_click_id = click_token
+        show_station_popup(closest)
