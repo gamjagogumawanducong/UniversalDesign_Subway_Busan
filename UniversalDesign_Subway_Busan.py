@@ -55,6 +55,29 @@ st.markdown("""
             border-radius: 50%;
             display: inline-block;
         }
+        div[data-testid="stButton"] > button {
+            border-radius: 999px !important;
+            background-color: #F8F9FA !important;
+            color: #495057 !important;
+            border: 1.5px solid #DEE2E6 !important;
+            font-size: 0.9rem !important;
+            font-weight: 700 !important;
+            padding: 5px 14px !important;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
+            transition: all 0.15s ease !important;
+        }
+        div[data-testid="stButton"] > button:hover {
+            background-color: #E9ECEF !important;
+            color: #111827 !important;
+            border-color: #ADB5BD !important;
+        }
+        div[data-testid="stButton"] > button p::before {
+            content: "● ";
+            font-size: 0.72rem;
+            color: #868E96;
+            margin-right: 4px;
+            vertical-align: middle;
+        }
         .ud-legend-box {
             display: flex;
             flex-wrap: wrap;
@@ -520,15 +543,56 @@ st.components.v1.html("""
 (function() {
     const doc = window.parent.document;
 
-    function enableMobilePinch() {
-        const dragLayers = doc.querySelectorAll('.nsewdrag, .draglayer, .svg-container');
-        dragLayers.forEach(el => {
-            el.style.touchAction = 'pinch-zoom pan-x pan-y';
+    function attachPinchZoom() {
+        const plots = doc.querySelectorAll('.js-plotly-plot');
+        plots.forEach(gd => {
+            if (!gd || gd._pinchBound) return;
+            gd._pinchBound = true;
+            let lastDist = null;
+
+            gd.addEventListener('touchstart', function(e) {
+                if (e.touches.length === 2) {
+                    const dx = e.touches.item(0).clientX - e.touches.item(1).clientX;
+                    const dy = e.touches.item(0).clientY - e.touches.item(1).clientY;
+                    lastDist = Math.hypot(dx, dy);
+                }
+            }, {passive: true});
+
+            gd.addEventListener('touchmove', function(e) {
+                if (e.touches.length === 2 && lastDist && gd._fullLayout) {
+                    e.preventDefault();
+                    const dx = e.touches.item(0).clientX - e.touches.item(1).clientX;
+                    const dy = e.touches.item(0).clientY - e.touches.item(1).clientY;
+                    const newDist = Math.hypot(dx, dy);
+                    if (newDist > 0 && Math.abs(newDist - lastDist) > 2) {
+                        const scale = lastDist / newDist;
+                        lastDist = newDist;
+                        const xa = gd._fullLayout.xaxis;
+                        const ya = gd._fullLayout.yaxis;
+                        const x0 = xa.range.at(0), x1 = xa.range.at(1);
+                        const y0 = ya.range.at(0), y1 = ya.range.at(1);
+                        const cx = (x0 + x1) * 0.5;
+                        const cy = (y0 + y1) * 0.5;
+                        const halfW = (x1 - x0) * 0.5 * scale;
+                        const halfH = (y1 - y0) * 0.5 * scale;
+                        window.parent.Plotly.relayout(gd, {
+                            'xaxis.range': [cx - halfW, cx + halfW],
+                            'yaxis.range': [cy - halfH, cy + halfH]
+                        });
+                    }
+                }
+            }, {passive: false});
+
+            gd.addEventListener('touchend', function(e) {
+                if (e.touches.length < 2) {
+                    lastDist = null;
+                }
+            }, {passive: true});
         });
     }
 
     function lockIconSize() {
-        enableMobilePinch();
+        attachPinchZoom();
         const plots = doc.querySelectorAll('.js-plotly-plot');
         plots.forEach(gd => {
             if (!gd || !gd._fullLayout || !gd._fullLayout.images) return;
@@ -554,7 +618,6 @@ st.components.v1.html("""
 })();
 </script>
 """, height=0)
-
 
 if selection and selection.selection and selection.selection.points:
     pt = selection.selection.points.__getitem__(0)
